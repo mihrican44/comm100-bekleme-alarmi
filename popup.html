@@ -276,6 +276,13 @@
       }
 
       .off-console.show { display: block; }
+
+      .off-console ol {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+
+      .off-console a { color: var(--teal); }
     </style>
   </head>
   <body>
@@ -300,7 +307,16 @@
       <div id="waitValue" class="wait-value">0<span>sn</span></div>
       <div id="statusMeta" class="meta">Aktif sayaç bulunamadı</div>
       <div id="offConsole" class="off-console">
-        Bu sekme Comm100 ajan konsolu değil. Alarm yalnızca canlı destek panelinde çalışır.
+        Bu sekme ajan konsolu değil. Eklentiyi gerçek panelde şöyle kullanın:
+        <ol>
+          <li>Adres çubuğuna <strong>chrome://extensions</strong> yazın</li>
+          <li><strong>Geliştirici modu</strong>nu açın</li>
+          <li><strong>Paketlenmemiş öğe yükle</strong> → bu proje klasörünü seçin</li>
+          <li>
+            <a href="https://dash15.lively-chat.com/agentconsole/" target="_blank" rel="noopener">Ajan konsolunu</a>
+            açın ve sayfaya bir kez tıklayın
+          </li>
+        </ol>
       </div>
     </section>
 

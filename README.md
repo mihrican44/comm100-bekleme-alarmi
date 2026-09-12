@@ -1,32 +1,26 @@
 # Comm100 Bekleme Alarmı
 
-Manifest V3 Chrome eklentisi. Comm100 / Lively Chat ajan konsolundaki yanıtsız müşteri sürelerini tarar; en uzun bekleme eşiği aşınca **yüksek siren** çalar. İsterseniz kendi MP3/WAV dosyanızı da ekleyebilirsiniz.
+Comm100 canlı destek **ajan konsolunda** yanıtsız müşteri süresini izleyen Chrome eklentisi. Eşik aşılınca yüksek siren çalar.
 
-Class ve id’ler dinamik olduğu için tarama metin ve aria etiketlerine dayanır.
+**Günlük kullanım için demo sayfası gerekmez.** Eklentiyi Chrome’a yükleyip paneli açın: [KURULUM.md](KURULUM.md)
 
-## Kurulum
+## Kurulum (özet)
 
-1. Bu klasörü bilgisayarınıza alın.
-2. Chrome’da `chrome://extensions` sayfasını açın.
-3. Sağ üstten **Geliştirici modu**nu açın.
-4. **Paketlenmemiş öğe yükle** ile bu dizini seçin. Güncelleme sonrası **Yenile**ye basın.
-5. [Comm100 ajan konsolu](https://dash15.lively-chat.com/agentconsole/) oturumunu açın.
-6. Alarmın çalabilmesi için konsola **bir kez tıklayın** (tarayıcı otomatik oynatma politikası).
+1. Bu klasörü bilgisayarınıza alın (`manifest.json` bu dizinde olmalı).
+2. Chrome’da `chrome://extensions` → **Geliştirici modu** → **Paketlenmemiş öğe yükle**.
+3. [Ajan konsolunu](https://dash15.lively-chat.com/agentconsole/) açın, sayfaya bir kez tıklayın.
+4. Eklenti simgesinden eşiği ayarlayın.
 
 ## Kullanım
 
-Eklenti simgesine tıklayın.
-
-- **Sesli uyarı:** alarmı açar / kapatır
+- **Sesli uyarı:** aç / kapat
 - **Eşik süresi:** varsayılan 120 saniye
 - **Ses düzeyi:** varsayılan %100
 - **Ses dosyası ekle:** kendi alarmınız (MP3 / WAV / OGG, en fazla 2 MB)
-- **Alarmı dene:** sireni veya yüklediğiniz dosyayı 3 saniye çalar
+- **Alarmı dene:** test tonu
 - **5 dk sessiz:** geçici susturma
 
-Eşik `chrome.storage.sync` üzerinde tutulur; özel ses `chrome.storage.local` içindedir. `content.js` değişikliği sayfa yenilenmeden alır.
-
-Temsilci yanıt verdiğinde, sayaç eşik altına inince veya sohbet kapandığında alarm kesilir. Eşik dolana kadar ses çıkmaz.
+Eşik dolana kadar sessizdir. Temsilci yanıtlayınca, sayaç düşünce veya sohbet kapanınca alarm kesilir.
 
 ## Desteklenen zaman biçimleri
 
@@ -50,16 +44,6 @@ Temsilci yanıt verdiğinde, sayaç eşik altına inince veya sohbet kapandığ�
 
 Host izinleri: `https://*.lively-chat.com/*`, `https://*.comm100.com/*`, `https://*.comm100app.com/*`.
 
-İzinler: `storage`, `activeTab`, `unlimitedStorage`.
-
-## Yerel demo
-
-```bash
-python3 -m http.server 43147 --bind 127.0.0.1
-```
-
-`http://127.0.0.1:43147/demo/` — demo eşiği 30 sn, eklentide 120 sn.
-
 ## Gizlilik
 
-Ayarlar tarayıcı deposunda tutulur. Sohbet içeriği dışarı gönderilmez. Yüklediğiniz ses dosyası yalnızca bu cihazda saklanır.
+Ayarlar tarayıcıda kalır. Sohbet içeriği dışarı gönderilmez.
