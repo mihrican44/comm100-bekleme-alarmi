@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Comm100 Bekleme Alarmı</title>
+    <style>
+      :root {
+        --bg: #08111a;
+        --panel: #0f1c28;
+        --panel-2: #132333;
+        --line: rgba(148, 163, 184, 0.16);
+        --text: #e8eef6;
+        --muted: #93a4b8;
+        --teal: #14b8a6;
+        --teal-dim: rgba(20, 184, 166, 0.16);
+        --rose: #fb7185;
+        --amber: #fbbf24;
+        --ok: #34d399;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        width: 360px;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+      }
+
+      body {
+        padding: 14px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(145deg, #0f766e, #14b8a6);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 0 4px var(--teal-dim);
+        flex-shrink: 0;
+      }
+
+      .logo svg { display: block; }
+
+      h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 650;
+        letter-spacing: 0.01em;
+      }
+
+      .subtitle {
+        margin: 1px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .status {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+      }
+
+      .pill {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--teal-dim);
+        color: var(--teal);
+      }
+
+      .pill.alarm {
+        background: rgba(244, 63, 94, 0.16);
+        color: var(--rose);
+      }
+
+      .pill.idle {
+        background: rgba(148, 163, 184, 0.12);
+        color: var(--muted);
+      }
+
+      .wait-value {
+        margin-top: 8px;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .wait-value span {
+        font-size: 13px;
+        color: var(--muted);
+        font-weight: 500;
+        margin-left: 4px;
+      }
+
+      .meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 10px;
+      }
+
+      .label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      label, .label {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .value {
+        color: var(--teal);
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--teal);
+        margin: 0;
+      }
+
+      .presets {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 7px 8px;
+      }
+
+      button:hover { border-color: var(--teal); }
+
+      .presets button.active {
+        background: var(--teal-dim);
+        border-color: var(--teal);
+        color: var(--teal);
+        font-weight: 700;
+      }
+
+      .number {
+        width: 100%;
+        margin-top: 8px;
+        background: #09131d;
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font: inherit;
+      }
+
+      .number:focus {
+        outline: none;
+        border-color: var(--teal);
+      }
+
+      .switch-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .switch {
+        position: relative;
+        width: 42px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        inset: 0;
+        background: #243140;
+        border-radius: 999px;
+        transition: 0.15s ease;
+      }
+
+      .slider:before {
+        content: "";
+        position: absolute;
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        top: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: 0.15s ease;
+      }
+
+      .switch input:checked + .slider {
+        background: var(--teal);
+      }
+
+      .switch input:checked + .slider:before {
+        transform: translateX(18px);
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 2px;
+      }
+
+      .actions button.primary {
+        background: var(--teal);
+        border-color: var(--teal);
+        color: #042f2e;
+        font-weight: 700;
+      }
+
+      .hint {
+        margin: 10px 2px 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .off-console {
+        display: none;
+        margin-top: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: rgba(251, 191, 36, 0.08);
+        color: var(--amber);
+        font-size: 11px;
+      }
+
+      .off-console.show { display: block; }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 4a6 6 0 0 1 6 6v2.2c0 .6.2 1.2.6 1.7L20 16H4l1.4-2.1c.4-.5.6-1.1.6-1.7V10a6 6 0 0 1 6-6Z" stroke="#042f2e" stroke-width="1.8"/>
+          <path d="M9 17.5a3 3 0 0 0 6 0" stroke="#042f2e" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Comm100 Bekleme Alarmı</h1>
+        <p class="subtitle">Yanıtsız müşteri mesajlarını izler</p>
+      </div>
+    </header>
+
+    <section class="status" aria-live="polite">
+      <div class="status-row">
+        <span class="label">En yüksek bekleme</span>
+        <span id="statePill" class="pill idle">Beklemede</span>
+      </div>
+      <div id="waitValue" class="wait-value">0<span>sn</span></div>
+      <div id="statusMeta" class="meta">Aktif sayaç bulunamadı</div>
+      <div id="offConsole" class="off-console">
+        Bu sekme Comm100 ajan konsolu değil. Alarm yalnızca canlı destek panelinde çalışır.
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="switch-row">
+        <div>
+          <div class="label">Sesli uyarı</div>
+          <div class="meta">Eşik aşıldığında kesikli 880 Hz alarm</div>
+        </div>
+        <label class="switch">
+          <input id="enabled" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="label-row">
+        <label for="thresholdRange">Eşik süresi</label>
+        <span id="thresholdLabel" class="value">120 sn</span>
+      </div>
+      <input id="thresholdRange" type="range" min="15" max="600" step="15" value="120" />
+      <div class="presets" role="group" aria-label="Hazır eşikler">
+        <button type="button" data-threshold="60">60 sn</button>
+        <button type="button" data-threshold="90">90 sn</button>
+        <button type="button" data-threshold="120">120 sn</button>
+        <button type="button" data-threshold="180">180 sn</button>
+      </div>
+      <input id="thresholdInput" class="number" type="number" min="5" max="3600" step="1" value="120" />
+    </section>
+
+    <section class="card">
+      <div class="label-row">
+        <label for="volume">Ses düzeyi</label>
+        <span id="volumeLabel" class="value">55%</span>
+      </div>
+      <input id="volume" type="range" min="0" max="100" step="5" value="55" />
+    </section>
+
+    <div class="actions">
+      <button id="testAlarm" class="primary" type="button">Alarmı dene</button>
+      <button id="muteFive" type="button">5 dk sessiz</button>
+    </div>
+    <p class="hint">Ayarlar tüm cihazlarınıza senkronlanır. Eşik değişince sayfa yenilemeniz gerekmez.</p>
+    <script src="popup.js"></script>
+  </body>
+</html>

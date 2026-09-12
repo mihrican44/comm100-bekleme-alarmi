@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Comm100 Bekleme Alarmı — Demo Konsol</title>
+    <style>
+      :root {
+        --bg: #071018;
+        --panel: #10202d;
+        --line: rgba(148, 163, 184, 0.14);
+        --text: #e8eef6;
+        --muted: #8ea0b5;
+        --teal: #14b8a6;
+        --rose: #fb7185;
+        --visitor: #38bdf8;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+      body { display: grid; grid-template-rows: auto 1fr; }
+      header {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 14px 20px; border-bottom: 1px solid var(--line); background: #0b1722;
+      }
+      h1 { margin: 0; font-size: 16px; }
+      .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+      .layout { display: grid; grid-template-columns: 320px 1fr 300px; min-height: 0; }
+      @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+      .col { border-right: 1px solid var(--line); min-height: 0; overflow: auto; }
+      .col:last-child { border-right: none; }
+      .col h2 { margin: 0; padding: 14px 16px 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+      .chat {
+        margin: 8px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); cursor: pointer;
+      }
+      .chat.active { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; }
+      .chat.alarm { border-color: var(--rose); }
+      .chat-top { display: flex; justify-content: space-between; gap: 8px; }
+      .name { font-weight: 700; }
+      .wait { font-variant-numeric: tabular-nums; color: var(--teal); font-weight: 700; }
+      .chat.alarm .wait { color: var(--rose); }
+      .preview { color: var(--muted); font-size: 12px; margin-top: 6px; }
+      .thread { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+      .bubble { max-width: 70%; padding: 10px 12px; border-radius: 12px; }
+      .bubble.visitor { background: #163044; align-self: flex-start; }
+      .bubble.agent { background: #134e4a; align-self: flex-end; }
+      .controls { padding: 12px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+      button { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #132333; color: var(--text); border-radius: 8px; padding: 8px 10px; }
+      button.primary { background: var(--teal); color: #042f2e; border-color: var(--teal); font-weight: 700; }
+      .settings { padding: 16px; }
+      label { display: block; font-size: 12px; font-weight: 650; margin-bottom: 6px; }
+      input[type="range"], input[type="number"] { width: 100%; accent-color: var(--teal); }
+      .status-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+      .big { font-size: 28px; font-weight: 700; }
+      .hint { color: var(--muted); font-size: 12px; }
+      .switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Comm100 Ajan Konsolu — Demo</h1>
+        <p class="sub">Yanıtsız müşteri süreleri artar. Eşik aşılınca eklenti 880 Hz kesikli alarm üretir.</p>
+      </div>
+      <div class="hint">Bu sayfa tarayıcıda eklenti mantığını test etmek içindir. Gerçek panelde yüklenmiş Chrome eklentisi kullanılır.</div>
+    </header>
+    <div class="layout">
+      <section class="col" id="list">
+        <h2>Sohbetler</h2>
+      </section>
+      <section class="col">
+        <h2>Aktif sohbet</h2>
+        <div class="thread" id="thread"></div>
+        <div class="controls">
+          <button class="primary" id="reply">Temsilci yanıtı gönder</button>
+          <button id="visitorMsg">Müşteri mesajı ekle</button>
+          <button id="closeChat">Sohbeti kapat</button>
+          <button id="addChat">Yeni bekleyen sohbet</button>
+        </div>
+      </section>
+      <aside class="col settings">
+        <h2>Alarm ayarları</h2>
+        <div class="status-card">
+          <div class="hint">Algılanan en yüksek bekleme</div>
+          <div class="big" id="maxWait">0:00</div>
+          <div class="hint" id="scanMeta">Tarama bekleniyor</div>
+        </div>
+        <div class="switch">
+          <label for="enabled">Sesli uyarı</label>
+          <input id="enabled" type="checkbox" checked />
+        </div>
+        <label for="threshold">Eşik (saniye)</label>
+        <input id="threshold" type="range" min="15" max="180" step="15" value="30" />
+        <input id="thresholdNum" type="number" min="5" max="3600" value="30" />
+        <p class="hint" style="margin-top:10px">Demo için varsayılan eşik 30 sn. Eklenti popup’ında varsayılan 120 sn’dir.</p>
+      </aside>
+    </div>
+
+    <script src="chrome-shim.js"></script>
+    <script src="../content.js"></script>
+    <script>
+      const chats = [
+        { id: 1, name: "Ayşe Kaya", wait: 18, open: true, lastFrom: "visitor", preview: "Siparişim hala kargoda görünüyor." },
+        { id: 2, name: "Mert Demir", wait: 41, open: true, lastFrom: "visitor", preview: "Fatura kesimini bekliyorum." },
+        { id: 3, name: "Elena Rossi", wait: 7, open: true, lastFrom: "agent", preview: "Hesap bilgilerinizi kontrol ediyorum." }
+      ];
+      let selected = 2;
+
+      const listEl = document.getElementById("list");
+      const threadEl = document.getElementById("thread");
+      const maxWaitEl = document.getElementById("maxWait");
+      const scanMetaEl = document.getElementById("scanMeta");
+
+      function fmt(sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        if (m >= 60) {
+          const h = Math.floor(m / 60);
+          return `${h}:${String(m % 60).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+        }
+        return `${m}:${String(s).padStart(2, "0")}`;
+      }
+
+      function render() {
+        [...listEl.querySelectorAll(".chat")].forEach((n) => n.remove());
+        for (const chat of chats) {
+          if (!chat.open) continue;
+          const el = document.createElement("article");
+          const waiting = chat.lastFrom === "visitor";
+          el.className = "chat" + (chat.id === selected ? " active" : "") + (waiting && chat.wait > 30 ? " alarm" : "");
+          el.innerHTML = `
+            <div class="chat-top">
+              <span class="name">${chat.name}</span>
+              <span class="wait" data-wait="${chat.wait}" aria-label="${waiting ? "waiting " : "duration "}${fmt(chat.wait)}">${waiting ? fmt(chat.wait) : "0:00"}</span>
+            </div>
+            <div class="preview">${waiting ? "Yanıt bekleniyor · " : "Temsilci yazdı · "}${chat.preview}</div>
+          `;
+          el.addEventListener("click", () => { selected = chat.id; render(); });
+          listEl.appendChild(el);
+        }
+
+        const chat = chats.find((c) => c.id === selected);
+        threadEl.innerHTML = "";
+        if (!chat || !chat.open) {
+          threadEl.innerHTML = '<p class="hint">Sohbet kapandı veya seçilmedi.</p>';
+          return;
+        }
+        threadEl.innerHTML = `
+          <div class="bubble visitor">Merhaba, yardıma ihtiyacım var.</div>
+          ${chat.lastFrom === "agent" ? '<div class="bubble agent">Tabii, hemen bakıyorum.</div>' : `<div class="bubble visitor">${chat.preview}</div>`}
+          <p class="hint">Bekleme sayacı: <strong aria-label="waiting ${fmt(chat.wait)}">${chat.lastFrom === "visitor" ? fmt(chat.wait) : "0s"}</strong></p>
+        `;
+      }
+
+      document.getElementById("reply").addEventListener("click", () => {
+        const chat = chats.find((c) => c.id === selected);
+        if (!chat) return;
+        chat.lastFrom = "agent";
+        chat.wait = 0;
+        chat.preview = "Temsilci yanıt verdi.";
+        render();
+      });
+
+      document.getElementById("visitorMsg").addEventListener("click", () => {
+        const chat = chats.find((c) => c.id === selected);
+        if (!chat) return;
+        chat.lastFrom = "visitor";
+        chat.wait = 1;
+        chat.preview = "Hâlâ bekliyorum, yardımcı olabilir misiniz?";
+        render();
+      });
+
+      document.getElementById("closeChat").addEventListener("click", () => {
+        const chat = chats.find((c) => c.id === selected);
+        if (!chat) return;
+        chat.open = false;
+        chat.wait = 0;
+        const next = chats.find((c) => c.open);
+        selected = next ? next.id : 0;
+        render();
+      });
+
+      document.getElementById("addChat").addEventListener("click", () => {
+        const id = Math.max(...chats.map((c) => c.id)) + 1;
+        chats.push({
+          id,
+          name: "Yeni Ziyaretçi " + id,
+          wait: 5,
+          open: true,
+          lastFrom: "visitor",
+          preview: "Bağlantı sorunu yaşıyorum."
+        });
+        selected = id;
+        render();
+      });
+
+      const threshold = document.getElementById("threshold");
+      const thresholdNum = document.getElementById("thresholdNum");
+      const enabled = document.getElementById("enabled");
+
+      chrome.storage.sync.set({ alarmThresholdSeconds: 30, enabled: true, volume: 0.55 });
+
+      threshold.addEventListener("input", () => {
+        thresholdNum.value = threshold.value;
+        chrome.storage.sync.set({ alarmThresholdSeconds: Number(threshold.value) });
+      });
+      thresholdNum.addEventListener("change", () => {
+        threshold.value = thresholdNum.value;
+        chrome.storage.sync.set({ alarmThresholdSeconds: Number(thresholdNum.value) });
+      });
+      enabled.addEventListener("change", () => {
+        chrome.storage.sync.set({ enabled: enabled.checked });
+      });
+
+      setInterval(() => {
+        for (const chat of chats) {
+          if (chat.open && chat.lastFrom === "visitor") chat.wait += 1;
+        }
+        render();
+        const api = window.Comm100WaitAlarm;
+        if (api) {
+          const st = api.getStatus();
+          maxWaitEl.textContent = fmt(st.maxWaitTimeSeconds || 0);
+          scanMetaEl.textContent = st.alarmActive
+            ? "Alarm çalıyor · eşik aşıldı"
+            : `${st.matchCount || 0} sayaç izleniyor`;
+        }
+      }, 1000);
+
+      render();
+    </script>
+  </body>
+</html>
