@@ -28,7 +28,7 @@
   const POSITIVE_HINT =
     /\b(wait(?:ing)?|unanswered|pending|queue|queued|idle|unreplied|response\s*time|agent\s*idle|yan[ıi]t\s*bek|bekliyor|cevaplanmad[ıi]|kuyruk)\b/i;
   const NEGATIVE_HINT =
-    /\b(duration|unresponsive|visitor\s*idle|local\s*time|timestamp|ended|closed|chat\s*time|s[uü]re\s*toplam|ziyaret[cç]i\s*idle)\b/i;
+    /\b(duration|unresponsive|visitor\s*idle|local\s*time|timestamp|ended|closed|chat\s*time|s[uü]re\s*toplam|ziyaret[cç]i\s*idle|temsilci\s*yazd|yan[ıi]t\s*verdi)\b/i;
   const ATTR_POSITIVE = /wait|timer|elapsed|unanswered|queue|pending|idle|countdown/i;
   const ATTR_NEGATIVE = /duration|unresponsive|timestamp|clock|localtime|ended/i;
   const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "CODE", "PRE", "SVG", "MATH"]);
@@ -65,6 +65,11 @@
   let lastAlarmActive = false;
   let lastMatchCount = 0;
   let scanning = false;
+  let scanQueued = false;
+  let replyQuietUntil = 0;
+  let runtimeListener = null;
+  let replyKeyHandler = null;
+  let replyClickHandler = null;
 
   const isExtensionContext = Boolean(
     typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id
@@ -203,14 +208,14 @@
     let score = 1;
     const ctx = nearbyContext(el);
     const attrBlob = ctx;
+    const isWait = POSITIVE_HINT.test(ctx);
 
-    if (POSITIVE_HINT.test(ctx)) score += 3;
+    if (isWait) score += 3;
     if (NEGATIVE_HINT.test(ctx)) score -= 4;
-    if (ATTR_POSITIVE.test(attrBlob)) score += 2;
     if (ATTR_NEGATIVE.test(attrBlob)) score -= 3;
     if (parsedSeconds >= 1 && parsedSeconds <= settings.alarmThresholdSeconds * 12) score += 1;
     if (parsedSeconds > 3 * 60 * 60) score -= 2;
-    return score;
+    return { score, isWait };
   }
 
   function collectRootList(doc) {
@@ -287,12 +292,13 @@
       if (hits.length) {
         const el = current.parentElement;
         for (const hit of hits) {
-          const score = scoreMatch(el, hit.parsedSeconds);
-          if (score <= 0) continue;
+          const ranked = scoreMatch(el, hit.parsedSeconds);
+          if (ranked.score <= 0 || !ranked.isWait) continue;
           bucket.push({
-            key: `${elementPathKey(el)}::${hit.raw}`,
+            key: `${elementPathKey(el)}#${hit.index}`,
             parsedSeconds: hit.parsedSeconds,
-            score,
+            score: ranked.score,
+            isWait: true,
             raw: hit.raw
           });
         }
@@ -325,12 +331,13 @@
         if (!blob) continue;
         const hits = extractTimesFromText(blob);
         for (const hit of hits) {
-          const score = scoreMatch(el, hit.parsedSeconds);
-          if (score <= 0) continue;
+          const ranked = scoreMatch(el, hit.parsedSeconds);
+          if (ranked.score <= 0 || !ranked.isWait) continue;
           bucket.push({
-            key: `${elementPathKey(el)}@attr::${hit.raw}`,
+            key: `${elementPathKey(el)}@attr#${hit.index}`,
             parsedSeconds: hit.parsedSeconds,
-            score,
+            score: ranked.score,
+            isWait: true,
             raw: hit.raw
           });
         }
@@ -382,14 +389,26 @@
     scanToken += 1;
     let maxWaitTimeSeconds = 0;
     let matchCount = 0;
+    let sawReset = false;
 
     for (const match of matches) {
+      if (!match.isWait || match.parsedSeconds <= 0) continue;
+
       const prev = trackers.get(match.key);
       let liveHits = prev ? prev.liveHits : 0;
       if (prev) {
         const delta = match.parsedSeconds - prev.seconds;
+        if (delta < -3) {
+          liveHits = 0;
+          sawReset = true;
+          trackers.set(match.key, {
+            seconds: match.parsedSeconds,
+            lastSeenScan: scanToken,
+            liveHits: 0
+          });
+          continue;
+        }
         if (delta >= 1 && delta <= 6) liveHits += 1;
-        else if (delta < -5) liveHits = 0;
       }
 
       trackers.set(match.key, {
@@ -397,10 +416,6 @@
         lastSeenScan: scanToken,
         liveHits
       });
-
-      const liveBoost = liveHits >= 1 ? 2 : 0;
-      const effectiveScore = match.score + liveBoost;
-      if (effectiveScore <= 0) continue;
 
       matchCount += 1;
       maxWaitTimeSeconds = Math.max(maxWaitTimeSeconds, match.parsedSeconds);
@@ -410,7 +425,7 @@
       if (scanToken - tracker.lastSeenScan >= TRACK_TTL_SCANS) trackers.delete(key);
     }
 
-    return { maxWaitTimeSeconds, matchCount };
+    return { maxWaitTimeSeconds, matchCount, sawReset };
   }
 
   const alarmSynth = {
@@ -426,12 +441,69 @@
   };
 
   function shouldRing(maxWaitTimeSeconds) {
+    if (Date.now() < replyQuietUntil) return false;
     return (
       settings.enabled &&
       !isMuted() &&
       maxWaitTimeSeconds > 0 &&
       maxWaitTimeSeconds >= settings.alarmThresholdSeconds
     );
+  }
+
+  function silenceAlarm(broadcast) {
+    alarmSynth.stop();
+    if (!broadcast || !isExtensionContext) return;
+    try {
+      chrome.runtime.sendMessage({ type: "SILENCE_ALARM" }, () => void chrome.runtime.lastError);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function noteAgentReply() {
+    replyQuietUntil = Date.now() + 1600;
+    silenceAlarm(true);
+    scanOnce().catch(() => {});
+  }
+
+  function looksLikeComposer(el) {
+    if (!el || el.disabled) return false;
+    if (el.type === "number" || el.type === "range") return false;
+    const tag = el.tagName;
+    if (tag === "TEXTAREA") return true;
+    if (el.isContentEditable) return true;
+    if (tag === "INPUT" && /^(text|search)?$/.test(el.type || "text")) return true;
+    return false;
+  }
+
+  function looksLikeReplyOrClose(el) {
+    if (!el) return false;
+    const text = `${el.getAttribute("aria-label") || ""} ${el.getAttribute("title") || ""} ${el.textContent || ""}`.toLowerCase();
+    return /send|gönder|reply|yan[ıi]t|submit|end chat|close chat|sohbeti kapat|sonland[ıi]r/.test(text);
+  }
+
+  function bindReplyWatchers() {
+    if (replyKeyHandler) return;
+    replyKeyHandler = (event) => {
+      if (event.key !== "Enter" || event.shiftKey) return;
+      if (looksLikeComposer(event.target)) noteAgentReply();
+    };
+    replyClickHandler = (event) => {
+      const btn = event.target && event.target.closest && event.target.closest("button, [role='button'], input[type='submit']");
+      if (btn && looksLikeReplyOrClose(btn)) noteAgentReply();
+    };
+    document.addEventListener("keydown", replyKeyHandler, true);
+    document.addEventListener("click", replyClickHandler, true);
+  }
+
+  function bindRuntimeSilence() {
+    if (!isExtensionContext || !chrome.runtime?.onMessage || runtimeListener) return;
+    runtimeListener = (message) => {
+      if (message && message.type === "SILENCE_ALARM") {
+        alarmSynth.stop();
+      }
+    };
+    chrome.runtime.onMessage.addListener(runtimeListener);
   }
 
   function publishStatus(maxWaitTimeSeconds, matchCount, alarmActive) {
@@ -458,7 +530,11 @@
   }
 
   async function scanOnce() {
-    if (destroyed || scanning) return;
+    if (destroyed) return;
+    if (scanning) {
+      scanQueued = true;
+      return;
+    }
     scanning = true;
     try {
       const matches = [];
@@ -472,20 +548,27 @@
       }
 
       const apiWaits = await readComm100ApiWaits();
-      for (const seconds of apiWaits) {
+      if (apiWaits.length) {
+        const seconds = Math.max(...apiWaits);
         matches.push({
-          key: `comm100-api:${seconds}`,
+          key: "comm100-api:current",
           parsedSeconds: seconds,
           score: 6,
+          isWait: true,
           raw: `${seconds}s`
         });
       }
 
-      const { maxWaitTimeSeconds, matchCount } = updateTrackers(matches);
+      const { maxWaitTimeSeconds, matchCount, sawReset } = updateTrackers(matches);
+      if (sawReset) replyQuietUntil = Math.max(replyQuietUntil, Date.now() + 1200);
+
       const alarmActive = shouldRing(maxWaitTimeSeconds);
 
       if (alarmActive) alarmSynth.start();
-      else alarmSynth.stop();
+      else {
+        alarmSynth.stop();
+        if (lastAlarmActive || sawReset) silenceAlarm(true);
+      }
 
       if (
         maxWaitTimeSeconds !== lastMaxWait ||
@@ -496,16 +579,24 @@
       }
     } finally {
       scanning = false;
+      if (scanQueued && !destroyed) {
+        scanQueued = false;
+        scanOnce().catch(() => {});
+      }
     }
   }
 
   function scheduleScan() {
     if (destroyed) return;
+    if (scanning) {
+      scanQueued = true;
+      return;
+    }
     if (mutationTimerId) return;
     mutationTimerId = globalThis.setTimeout(() => {
       mutationTimerId = 0;
       scanOnce().catch(() => {});
-    }, MUTATION_DEBOUNCE_MS);
+    }, 80);
   }
 
   function attachObserver() {
@@ -592,6 +683,11 @@
       document.removeEventListener("pointerdown", pointerUnlockHandler);
       document.removeEventListener("keydown", pointerUnlockHandler);
     }
+    if (replyKeyHandler) document.removeEventListener("keydown", replyKeyHandler, true);
+    if (replyClickHandler) document.removeEventListener("click", replyClickHandler, true);
+    if (runtimeListener && chrome?.runtime?.onMessage) {
+      try { chrome.runtime.onMessage.removeListener(runtimeListener); } catch { /* ignore */ }
+    }
     globalThis.__COMM100_WAIT_ALARM_LOADED__ = false;
   }
 
@@ -599,6 +695,8 @@
     await loadSettings();
     listenStorage();
     bindAudioUnlock();
+    bindReplyWatchers();
+    bindRuntimeSilence();
     attachObserver();
     await scanOnce();
     scanTimerId = globalThis.setInterval(() => {

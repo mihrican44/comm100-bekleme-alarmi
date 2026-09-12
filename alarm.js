@@ -46,6 +46,23 @@
     sirenOn: false,
     usingFallback: false,
     testTimer: 0,
+    playGen: 0,
+
+    hardPause(el) {
+      if (!el) return;
+      try {
+        el.pause();
+        el.muted = true;
+        el.volume = 0;
+        el.loop = false;
+        el.currentTime = 0;
+        el.removeAttribute("src");
+        el.src = "";
+        el.load();
+      } catch {
+        /* ignore */
+      }
+    },
 
     configure(next) {
       if (!next || typeof next !== "object") return;
@@ -135,33 +152,33 @@
       if (this.playing) return;
       this.playing = true;
       this.usingFallback = false;
+      this.playGen += 1;
+      const gen = this.playGen;
       const el = this.ensureAudio();
       const src = this.activeSource();
       try {
-        if (el.src !== src) el.src = src;
+        el.src = src;
         el.loop = true;
         el.muted = false;
         el.volume = this.volume;
         el.currentTime = 0;
         const playResult = el.play();
-        if (playResult && typeof playResult.catch === "function") {
-          playResult.catch(() => this.startSirenFallback());
+        if (playResult && typeof playResult.then === "function") {
+          playResult.then(() => {
+            if (!this.playing || this.playGen !== gen) this.hardPause(el);
+          }).catch(() => {
+            if (this.playing && this.playGen === gen) this.startSirenFallback();
+          });
         }
       } catch {
-        this.startSirenFallback();
+        if (this.playing && this.playGen === gen) this.startSirenFallback();
       }
     },
 
     startSirenFallback() {
       if (!this.playing) return;
       this.usingFallback = true;
-      try {
-        if (this.audioEl) {
-          this.audioEl.pause();
-        }
-      } catch {
-        /* ignore */
-      }
+      this.hardPause(this.audioEl);
       const ctx = this.ensureContext();
       if (!ctx) return;
       this.stopSirenNodes();
@@ -232,20 +249,12 @@
     stop() {
       this.playing = false;
       this.usingFallback = false;
+      this.playGen += 1;
       if (this.testTimer) {
         globalThis.clearTimeout(this.testTimer);
         this.testTimer = 0;
       }
-      if (this.audioEl) {
-        try {
-          this.audioEl.pause();
-          this.audioEl.currentTime = 0;
-          this.audioEl.muted = true;
-          this.audioEl.volume = 0;
-        } catch {
-          /* ignore */
-        }
-      }
+      this.hardPause(this.audioEl);
       this.stopSirenNodes();
     },
 

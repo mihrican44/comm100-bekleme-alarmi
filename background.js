@@ -165,6 +165,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "SILENCE_ALARM") {
+    const tabId = sender.tab?.id;
+    if (typeof tabId === "number") {
+      const frames = tabFrames.get(tabId);
+      if (frames) {
+        for (const state of frames.values()) {
+          state.alarmActive = false;
+          state.maxWaitTimeSeconds = 0;
+          state.matchCount = 0;
+          state.updatedAt = Date.now();
+        }
+      }
+      chrome.tabs.sendMessage(tabId, { type: "SILENCE_ALARM" }).catch(() => {});
+      refreshBadge(tabId);
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (message.type === "GET_WATCH_STATUS") {
     sendResponse(aggregateAll());
     return true;
