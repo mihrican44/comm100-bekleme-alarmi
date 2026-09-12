@@ -308,7 +308,7 @@
       <div class="switch-row">
         <div>
           <div class="label">Sesli uyarı</div>
-          <div class="meta">Eşik aşıldığında kesikli 880 Hz alarm</div>
+          <div class="meta">Eşik aşıldığında yüksek siren / kendi sesiniz</div>
         </div>
         <label class="switch">
           <input id="enabled" type="checkbox" checked />
@@ -335,9 +335,24 @@
     <section class="card">
       <div class="label-row">
         <label for="volume">Ses düzeyi</label>
-        <span id="volumeLabel" class="value">55%</span>
+        <span id="volumeLabel" class="value">100%</span>
       </div>
-      <input id="volume" type="range" min="0" max="100" step="5" value="55" />
+      <input id="volume" type="range" min="0" max="100" step="5" value="100" />
+    </section>
+
+    <section class="card">
+      <div class="label-row">
+        <span class="label">Alarm sesi</span>
+        <span id="soundModeLabel" class="value">Dahili siren</span>
+      </div>
+      <p class="meta" id="soundFileName">Varsayılan yüksek siren kullanılır.</p>
+      <p class="meta" id="soundError" style="color: var(--rose); display: none; margin-top: 6px;"></p>
+      <div class="actions" style="margin-top: 8px;">
+        <button id="pickSound" type="button">Ses dosyası ekle</button>
+        <button id="clearSound" type="button">Dahili sese dön</button>
+      </div>
+      <input id="soundFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac" hidden />
+      <p class="meta" style="margin-top:8px">MP3, WAV veya OGG. En fazla 2 MB. Konsola bir kez tıklayın, sonra “Alarmı dene”.</p>
     </section>
 
     <div class="actions">
@@ -345,6 +360,7 @@
       <button id="muteFive" type="button">5 dk sessiz</button>
     </div>
     <p class="hint">Ayarlar tüm cihazlarınıza senkronlanır. Eşik değişince sayfa yenilemeniz gerekmez.</p>
+    <script src="alarm.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

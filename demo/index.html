@@ -59,7 +59,7 @@
     <header>
       <div>
         <h1>Comm100 Ajan Konsolu — Demo</h1>
-        <p class="sub">Yanıtsız müşteri süreleri artar. Eşik aşılınca eklenti 880 Hz kesikli alarm üretir.</p>
+        <p class="sub">Yanıtsız müşteri süreleri artar. Eşik aşılınca yüksek siren çalar; kendi sesinizi de ekleyebilirsiniz.</p>
       </div>
       <div class="hint">Bu sayfa tarayıcıda eklenti mantığını test etmek içindir. Gerçek panelde yüklenmiş Chrome eklentisi kullanılır.</div>
     </header>
@@ -88,14 +88,24 @@
           <label for="enabled">Sesli uyarı</label>
           <input id="enabled" type="checkbox" checked />
         </div>
-        <label for="threshold">Eşik (saniye)</label>
+        <label for="volume">Ses düzeyi</label>
+        <input id="volume" type="range" min="0" max="100" step="5" value="100" />
+        <label for="threshold" style="margin-top:12px">Eşik (saniye)</label>
         <input id="threshold" type="range" min="15" max="180" step="15" value="30" />
         <input id="thresholdNum" type="number" min="5" max="3600" value="30" />
-        <p class="hint" style="margin-top:10px">Demo için varsayılan eşik 30 sn. Eklenti popup’ında varsayılan 120 sn’dir.</p>
+        <p class="hint" id="soundName" style="margin-top:10px">Alarm: dahili siren</p>
+        <div class="controls" style="padding: 0; margin-top: 8px;">
+          <button id="testAlarm" class="primary" type="button">Alarmı dene</button>
+          <button id="pickSound" type="button">Ses dosyası ekle</button>
+          <button id="clearSound" type="button">Dahili sese dön</button>
+        </div>
+        <input id="soundFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a" hidden />
+        <p class="hint" style="margin-top:10px">Sayfaya bir kez tıklayın, sonra alarmı deneyin. Demo eşiği 30 sn; eklenti popup’ında varsayılan 120 sn.</p>
       </aside>
     </div>
 
     <script src="chrome-shim.js"></script>
+    <script src="../alarm.js"></script>
     <script src="../content.js"></script>
     <script>
       const chats = [
@@ -197,7 +207,7 @@
       const thresholdNum = document.getElementById("thresholdNum");
       const enabled = document.getElementById("enabled");
 
-      chrome.storage.sync.set({ alarmThresholdSeconds: 30, enabled: true, volume: 0.55 });
+      chrome.storage.sync.set({ alarmThresholdSeconds: 30, enabled: true, volume: 1, soundMode: "builtin" });
 
       threshold.addEventListener("input", () => {
         thresholdNum.value = threshold.value;
@@ -209,6 +219,38 @@
       });
       enabled.addEventListener("change", () => {
         chrome.storage.sync.set({ enabled: enabled.checked });
+      });
+
+      const volume = document.getElementById("volume");
+      const soundName = document.getElementById("soundName");
+      const soundFile = document.getElementById("soundFile");
+      volume.addEventListener("input", () => {
+        chrome.storage.sync.set({ volume: Number(volume.value) / 100 });
+      });
+      document.getElementById("testAlarm").addEventListener("click", () => {
+        window.Comm100AlarmPlayer?.unlock();
+        window.Comm100AlarmPlayer?.test(2800);
+      });
+      document.getElementById("pickSound").addEventListener("click", () => soundFile.click());
+      soundFile.addEventListener("change", () => {
+        const file = soundFile.files && soundFile.files[0];
+        soundFile.value = "";
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          chrome.storage.local.set({
+            customSoundDataUrl: reader.result,
+            customSoundName: file.name
+          });
+          chrome.storage.sync.set({ soundMode: "custom" });
+          soundName.textContent = "Alarm: " + file.name;
+        };
+        reader.readAsDataURL(file);
+      });
+      document.getElementById("clearSound").addEventListener("click", () => {
+        chrome.storage.local.remove(["customSoundDataUrl", "customSoundName"]);
+        chrome.storage.sync.set({ soundMode: "builtin" });
+        soundName.textContent = "Alarm: dahili siren";
       });
 
       setInterval(() => {

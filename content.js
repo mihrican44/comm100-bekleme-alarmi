@@ -2,10 +2,9 @@
  * Comm100 Bekleme Alarmı — content script
  *
  * Dinamik class/id'lere bağımlı olmadan metin nodlarını tarar, zaman
- * dizgelerini saniyeye çevirir ve eşik aşıldığında Web Audio API ile
- * kesikli alarm üretir. Bellek sızıntısı ve kopuk DOM düğümlerine karşı
- * korumalıdır: düğüm referansı tutulmaz, zamanlayıcılar tekildir, ses
- * düğümleri beep bitince disconnect edilir.
+ * Dizgelerini saniyeye çevirir; eşik aşılınca yüksek siren (veya
+ * kullanıcının ses dosyası) çalar. Bellek sızıntısı ve kopuk DOM
+ * düğümlerine karşı korumalıdır.
  */
 (() => {
   "use strict";
@@ -17,15 +16,13 @@
   const MUTATION_DEBOUNCE_MS = 250;
   const TRACK_TTL_SCANS = 4;
   const MAX_REASONABLE_SECONDS = 8 * 60 * 60;
-  const ALARM_FREQUENCY_HZ = 880;
-  const ALARM_GAP_MS = 800;
-  const BEEP_DURATION_SEC = 0.22;
 
   const DEFAULT_SETTINGS = Object.freeze({
     enabled: true,
     alarmThresholdSeconds: 120,
-    volume: 0.55,
-    mutedUntil: 0
+    volume: 1,
+    mutedUntil: 0,
+    soundMode: "builtin"
   });
 
   const POSITIVE_HINT =
@@ -47,7 +44,9 @@
     enabled: DEFAULT_SETTINGS.enabled,
     alarmThresholdSeconds: DEFAULT_SETTINGS.alarmThresholdSeconds,
     volume: DEFAULT_SETTINGS.volume,
-    mutedUntil: DEFAULT_SETTINGS.mutedUntil
+    mutedUntil: DEFAULT_SETTINGS.mutedUntil,
+    soundMode: DEFAULT_SETTINGS.soundMode,
+    customSoundDataUrl: ""
   };
 
   /** @type {Map<string, { seconds: number, lastSeenScan: number, liveHits: number }>} */
@@ -124,7 +123,9 @@
         ? clamp(Math.round(threshold), 5, 3600)
         : DEFAULT_SETTINGS.alarmThresholdSeconds,
       volume: Number.isFinite(volume) ? clamp(volume, 0, 1) : DEFAULT_SETTINGS.volume,
-      mutedUntil: Number.isFinite(mutedUntil) ? mutedUntil : 0
+      mutedUntil: Number.isFinite(mutedUntil) ? mutedUntil : 0,
+      soundMode: source.soundMode === "custom" ? "custom" : "builtin",
+      customSoundDataUrl: typeof source.customSoundDataUrl === "string" ? source.customSoundDataUrl : ""
     };
   }
 
@@ -134,6 +135,15 @@
     settings.alarmThresholdSeconds = normalized.alarmThresholdSeconds;
     settings.volume = normalized.volume;
     settings.mutedUntil = normalized.mutedUntil;
+    settings.soundMode = normalized.soundMode;
+    settings.customSoundDataUrl = normalized.customSoundDataUrl;
+    if (globalThis.Comm100AlarmPlayer) {
+      globalThis.Comm100AlarmPlayer.configure({
+        volume: settings.volume,
+        soundMode: settings.soundMode,
+        customSoundDataUrl: settings.customSoundDataUrl
+      });
+    }
     if (!settings.enabled || Date.now() < settings.mutedUntil) alarmSynth.stop();
   }
 
@@ -404,91 +414,14 @@
   }
 
   const alarmSynth = {
-    ctx: null,
-    loopId: 0,
-    playing: false,
-    unlockBound: false,
-
-    ensureContext() {
-      const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!Ctx) return null;
-      if (!this.ctx || this.ctx.state === "closed") {
-        try {
-          this.ctx = new Ctx();
-        } catch {
-          this.ctx = null;
-        }
-      }
-      if (this.ctx && this.ctx.state === "suspended") {
-        this.ctx.resume().catch(() => {});
-      }
-      return this.ctx;
-    },
-
-    beep() {
-      const ctx = this.ensureContext();
-      if (!ctx) return;
-      let osc;
-      let gain;
-      let filter;
-      try {
-        osc = ctx.createOscillator();
-        gain = ctx.createGain();
-        filter = ctx.createBiquadFilter();
-        osc.type = "square";
-        osc.frequency.setValueAtTime(ALARM_FREQUENCY_HZ, ctx.currentTime);
-        filter.type = "bandpass";
-        filter.frequency.setValueAtTime(ALARM_FREQUENCY_HZ, ctx.currentTime);
-        filter.Q.setValueAtTime(8, ctx.currentTime);
-
-        const level = clamp(settings.volume, 0, 1) * 0.18;
-        const now = ctx.currentTime;
-        gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, level), now + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + BEEP_DURATION_SEC);
-
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + BEEP_DURATION_SEC + 0.02);
-        osc.onended = () => {
-          try { osc.disconnect(); } catch { /* already disconnected */ }
-          try { filter.disconnect(); } catch { /* already disconnected */ }
-          try { gain.disconnect(); } catch { /* already disconnected */ }
-        };
-      } catch {
-        try { if (osc) osc.disconnect(); } catch { /* ignore */ }
-        try { if (filter) filter.disconnect(); } catch { /* ignore */ }
-        try { if (gain) gain.disconnect(); } catch { /* ignore */ }
-      }
-    },
-
     start() {
-      if (this.playing) return;
-      this.playing = true;
-      this.beep();
-      this.loopId = globalThis.setInterval(() => {
-        if (!this.playing) return;
-        this.beep();
-      }, ALARM_GAP_MS);
+      globalThis.Comm100AlarmPlayer?.start();
     },
-
     stop() {
-      if (!this.playing && !this.loopId) return;
-      this.playing = false;
-      if (this.loopId) {
-        globalThis.clearInterval(this.loopId);
-        this.loopId = 0;
-      }
+      globalThis.Comm100AlarmPlayer?.stop();
     },
-
     dispose() {
-      this.stop();
-      if (this.ctx && this.ctx.state !== "closed") {
-        this.ctx.close().catch(() => {});
-      }
-      this.ctx = null;
+      globalThis.Comm100AlarmPlayer?.dispose();
     }
   };
 
@@ -589,9 +522,8 @@
   }
 
   function bindAudioUnlock() {
-    if (alarmSynth.unlockBound) return;
-    alarmSynth.unlockBound = true;
-    pointerUnlockHandler = () => alarmSynth.ensureContext();
+    if (pointerUnlockHandler) return;
+    pointerUnlockHandler = () => globalThis.Comm100AlarmPlayer?.unlock();
     document.addEventListener("pointerdown", pointerUnlockHandler, { passive: true });
     document.addEventListener("keydown", pointerUnlockHandler, { passive: true });
   }
@@ -603,7 +535,16 @@
     }
     try {
       const stored = await chrome.storage.sync.get(DEFAULT_SETTINGS);
-      applySettings(stored);
+      let local = {};
+      try {
+        local = await chrome.storage.local.get({
+          customSoundDataUrl: "",
+          customSoundName: ""
+        });
+      } catch {
+        local = {};
+      }
+      applySettings({ ...stored, ...local });
     } catch {
       applySettings(DEFAULT_SETTINGS);
     }
@@ -612,12 +553,16 @@
   function listenStorage() {
     if (!isExtensionContext || !chrome.storage?.onChanged) return;
     storageListener = (changes, area) => {
-      if (area !== "sync") return;
+      if (area !== "sync" && area !== "local") return;
       const next = { ...settings };
       if (changes.enabled) next.enabled = changes.enabled.newValue;
       if (changes.alarmThresholdSeconds) next.alarmThresholdSeconds = changes.alarmThresholdSeconds.newValue;
       if (changes.volume) next.volume = changes.volume.newValue;
       if (changes.mutedUntil) next.mutedUntil = changes.mutedUntil.newValue;
+      if (changes.soundMode) next.soundMode = changes.soundMode.newValue;
+      if (Object.prototype.hasOwnProperty.call(changes, "customSoundDataUrl")) {
+        next.customSoundDataUrl = changes.customSoundDataUrl.newValue || "";
+      }
       applySettings(next);
       scanOnce().catch(() => {});
     };

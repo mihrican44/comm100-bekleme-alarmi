@@ -4,9 +4,11 @@
   const DEFAULTS = Object.freeze({
     enabled: true,
     alarmThresholdSeconds: 120,
-    volume: 0.55,
-    mutedUntil: 0
+    volume: 1,
+    mutedUntil: 0,
+    soundMode: "builtin"
   });
+  const MAX_SOUND_BYTES = 2 * 1024 * 1024;
 
   const enabledEl = document.getElementById("enabled");
   const rangeEl = document.getElementById("thresholdRange");
@@ -20,10 +22,14 @@
   const offConsoleEl = document.getElementById("offConsole");
   const testBtn = document.getElementById("testAlarm");
   const muteBtn = document.getElementById("muteFive");
+  const pickSoundBtn = document.getElementById("pickSound");
+  const clearSoundBtn = document.getElementById("clearSound");
+  const soundFileEl = document.getElementById("soundFile");
+  const soundModeLabel = document.getElementById("soundModeLabel");
+  const soundFileName = document.getElementById("soundFileName");
+  const soundError = document.getElementById("soundError");
   const presetButtons = [...document.querySelectorAll("[data-threshold]")];
 
-  let testCtx = null;
-  let testTimer = 0;
   let statusTimer = 0;
 
   function clamp(value, min, max) {
@@ -55,16 +61,50 @@
     volumeLabel.textContent = `${pct}%`;
   }
 
+  function showSoundError(message) {
+    if (!message) {
+      soundError.style.display = "none";
+      soundError.textContent = "";
+      return;
+    }
+    soundError.style.display = "block";
+    soundError.textContent = message;
+  }
+
+  function paintSound(mode, name) {
+    const custom = mode === "custom" && name;
+    soundModeLabel.textContent = custom ? "Kendi sesiniz" : "Dahili siren";
+    soundFileName.textContent = custom
+      ? name
+      : "Varsayılan yüksek siren kullanılır.";
+    clearSoundBtn.disabled = !custom;
+  }
+
   async function save(patch) {
     await chrome.storage.sync.set(patch);
   }
 
   async function load() {
     const stored = await chrome.storage.sync.get(DEFAULTS);
+    let local = { customSoundName: "", customSoundDataUrl: "" };
+    try {
+      local = await chrome.storage.local.get({
+        customSoundName: "",
+        customSoundDataUrl: ""
+      });
+    } catch {
+      /* local storage yoksa dahili ses */
+    }
     enabledEl.checked = stored.enabled !== false;
     paintThreshold(stored.alarmThresholdSeconds);
     paintVolume(stored.volume);
+    paintSound(stored.soundMode, local.customSoundName);
     updateMuteLabel(Number(stored.mutedUntil) || 0);
+    globalThis.Comm100AlarmPlayer?.configure({
+      volume: Number(stored.volume) || 1,
+      soundMode: stored.soundMode === "custom" ? "custom" : "builtin",
+      customSoundDataUrl: local.customSoundDataUrl || ""
+    });
   }
 
   function updateMuteLabel(mutedUntil) {
@@ -127,50 +167,11 @@
     updateMuteLabel(Number(stored.mutedUntil) || 0);
   }
 
-  function playTestBeep(volume) {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    if (!testCtx || testCtx.state === "closed") testCtx = new Ctx();
-    if (testCtx.state === "suspended") testCtx.resume().catch(() => {});
-
-    const osc = testCtx.createOscillator();
-    const gain = testCtx.createGain();
-    const filter = testCtx.createBiquadFilter();
-    osc.type = "square";
-    osc.frequency.value = 880;
-    filter.type = "bandpass";
-    filter.frequency.value = 880;
-    filter.Q.value = 8;
-    const now = testCtx.currentTime;
-    const level = clamp(volume, 0, 1) * 0.18;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, level), now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(testCtx.destination);
-    osc.start(now);
-    osc.stop(now + 0.24);
-    osc.onended = () => {
-      try { osc.disconnect(); } catch { /* ignore */ }
-      try { filter.disconnect(); } catch { /* ignore */ }
-      try { gain.disconnect(); } catch { /* ignore */ }
-    };
-  }
-
-  function startTestAlarm() {
-    const volume = Number(volumeEl.value) / 100;
-    playTestBeep(volume);
-    window.clearInterval(testTimer);
-    let ticks = 1;
-    testTimer = window.setInterval(() => {
-      ticks += 1;
-      playTestBeep(volume);
-      if (ticks >= 4) {
-        window.clearInterval(testTimer);
-        testTimer = 0;
-      }
-    }, 800);
+  function configurePlayerFromUi(extra = {}) {
+    globalThis.Comm100AlarmPlayer?.configure({
+      volume: Number(volumeEl.value) / 100,
+      ...extra
+    });
   }
 
   enabledEl.addEventListener("change", () => {
@@ -200,12 +201,18 @@
 
   volumeEl.addEventListener("input", () => {
     paintVolume(Number(volumeEl.value) / 100);
+    configurePlayerFromUi();
   });
   volumeEl.addEventListener("change", () => {
     save({ volume: Number(volumeEl.value) / 100 });
   });
 
-  testBtn.addEventListener("click", startTestAlarm);
+  testBtn.addEventListener("click", () => {
+    showSoundError("");
+    configurePlayerFromUi();
+    globalThis.Comm100AlarmPlayer?.unlock();
+    globalThis.Comm100AlarmPlayer?.test(2800);
+  });
 
   muteBtn.addEventListener("click", async () => {
     const stored = await chrome.storage.sync.get(["mutedUntil"]);
@@ -214,10 +221,53 @@
     refreshStatus();
   });
 
+  pickSoundBtn.addEventListener("click", () => soundFileEl.click());
+
+  soundFileEl.addEventListener("change", async () => {
+    const file = soundFileEl.files && soundFileEl.files[0];
+    soundFileEl.value = "";
+    if (!file) return;
+    if (file.size > MAX_SOUND_BYTES) {
+      showSoundError("Dosya 2 MB’dan küçük olmalı.");
+      return;
+    }
+    if (file.type && !file.type.startsWith("audio/")) {
+      showSoundError("Yalnızca ses dosyası seçin (MP3, WAV, OGG).");
+      return;
+    }
+    showSoundError("");
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    await chrome.storage.local.set({
+      customSoundDataUrl: dataUrl,
+      customSoundName: file.name
+    });
+    await save({ soundMode: "custom" });
+    paintSound("custom", file.name);
+    configurePlayerFromUi({
+      soundMode: "custom",
+      customSoundDataUrl: dataUrl
+    });
+  });
+
+  clearSoundBtn.addEventListener("click", async () => {
+    showSoundError("");
+    await chrome.storage.local.remove(["customSoundDataUrl", "customSoundName"]);
+    await save({ soundMode: "builtin" });
+    paintSound("builtin", "");
+    configurePlayerFromUi({
+      soundMode: "builtin",
+      customSoundDataUrl: ""
+    });
+  });
+
   window.addEventListener("unload", () => {
-    window.clearInterval(testTimer);
     window.clearInterval(statusTimer);
-    if (testCtx && testCtx.state !== "closed") testCtx.close().catch(() => {});
+    globalThis.Comm100AlarmPlayer?.stop();
   });
 
   load()

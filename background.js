@@ -7,8 +7,10 @@
 const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
   alarmThresholdSeconds: 120,
-  volume: 0.55,
-  mutedUntil: 0
+  volume: 1,
+  mutedUntil: 0,
+  soundMode: "builtin",
+  settingsVersion: 2
 });
 
 /**
@@ -29,8 +31,15 @@ async function ensureDefaults() {
   if (!isValidThreshold(Number(current.alarmThresholdSeconds))) {
     patch.alarmThresholdSeconds = DEFAULT_SETTINGS.alarmThresholdSeconds;
   }
-  if (!Number.isFinite(Number(current.volume)) || current.volume < 0 || current.volume > 1) {
+  if (Number(current.settingsVersion) !== 2) {
     patch.volume = DEFAULT_SETTINGS.volume;
+    patch.soundMode = current.soundMode === "custom" ? "custom" : "builtin";
+    patch.settingsVersion = 2;
+  } else if (!Number.isFinite(Number(current.volume)) || current.volume < 0 || current.volume > 1) {
+    patch.volume = DEFAULT_SETTINGS.volume;
+  }
+  if (current.soundMode !== "custom" && current.soundMode !== "builtin") {
+    patch.soundMode = DEFAULT_SETTINGS.soundMode;
   }
   if (!Number.isFinite(Number(current.mutedUntil))) patch.mutedUntil = 0;
 
