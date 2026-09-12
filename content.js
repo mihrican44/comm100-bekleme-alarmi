@@ -429,7 +429,8 @@
     return (
       settings.enabled &&
       !isMuted() &&
-      maxWaitTimeSeconds > settings.alarmThresholdSeconds
+      maxWaitTimeSeconds > 0 &&
+      maxWaitTimeSeconds >= settings.alarmThresholdSeconds
     );
   }
 

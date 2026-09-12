@@ -97,9 +97,10 @@
     ensureAudio() {
       if (this.audioEl) return this.audioEl;
       const el = new Audio();
-      el.preload = "auto";
+      el.preload = "none";
       el.loop = true;
-      el.volume = this.volume;
+      el.muted = true;
+      el.volume = 0;
       el.addEventListener("error", () => {
         if (this.playing) this.startSirenFallback();
       });
@@ -108,32 +109,25 @@
     },
 
     unlock() {
+      // Eşik dolmadan asla alarm dosyasını çalma; yalnızca ses bağlamını aç.
       const ctx = this.ensureContext();
-      if (ctx && ctx.state === "suspended") ctx.resume().catch(() => {});
-      const el = this.ensureAudio();
-      if (!el) return;
-      if (!el.src) el.src = this.activeSource();
-      if (this.playing) {
-        el.muted = false;
-        el.play().catch(() => this.startSirenFallback());
-        return;
-      }
-      el.muted = true;
-      const p = el.play();
-      if (p && typeof p.then === "function") {
-        p.then(() => {
-          if (this.playing) {
-            el.muted = false;
-            return;
-          }
-          el.pause();
-          el.currentTime = 0;
-          el.muted = false;
-        }).catch(() => {
-          el.muted = false;
-        });
-      } else {
-        el.muted = false;
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      try {
+        const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const src = ctx.createBufferSource();
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        src.buffer = buffer;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        src.start();
+        src.onended = () => {
+          try { src.disconnect(); } catch { /* ignore */ }
+          try { gain.disconnect(); } catch { /* ignore */ }
+        };
+      } catch {
+        /* sessiz kilit açma başarısız olsa da start() yine dener */
       }
     },
 
@@ -246,6 +240,8 @@
         try {
           this.audioEl.pause();
           this.audioEl.currentTime = 0;
+          this.audioEl.muted = true;
+          this.audioEl.volume = 0;
         } catch {
           /* ignore */
         }

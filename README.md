@@ -26,7 +26,7 @@ Eklenti simgesine tıklayın.
 
 Eşik `chrome.storage.sync` üzerinde tutulur; özel ses `chrome.storage.local` içindedir. `content.js` değişikliği sayfa yenilenmeden alır.
 
-Temsilci yanıt verdiğinde, sayaç sıfırlandığında veya sohbet kapandığında alarm kesilir.
+Temsilci yanıt verdiğinde, sayaç eşik altına inince veya sohbet kapandığında alarm kesilir. Eşik dolana kadar ses çıkmaz.
 
 ## Desteklenen zaman biçimleri
 
