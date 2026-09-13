@@ -16,7 +16,7 @@ Kurulum: [KURULUM.md](KURULUM.md)
 - **Sesli uyarı:** aç / kapat
 - **Eşik süresi:** varsayılan 120 saniye
 - **Ses düzeyi:** varsayılan %100
-- **Ses dosyası ekle:** kendi alarmınız (MP3 / WAV / OGG, en fazla 2 MB)
+- **Alarm sesi:** Siren, iPhone 1 (Radar tarzı), iPhone 2 (marimba tarzı) veya kendi dosyanız
 - **Alarmı dene:** test tonu
 - **5 dk sessiz:** geçici susturma
 

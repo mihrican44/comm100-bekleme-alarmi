@@ -29,6 +29,19 @@
   const soundFileName = document.getElementById("soundFileName");
   const soundError = document.getElementById("soundError");
   const presetButtons = [...document.querySelectorAll("[data-threshold]")];
+  const soundPresetButtons = [...document.querySelectorAll("[data-sound]")];
+
+  const SOUND_LABELS = {
+    builtin: "Dahili siren",
+    iphone1: "iPhone 1 · Radar",
+    iphone2: "iPhone 2 · Marimba",
+    custom: "Kendi sesiniz"
+  };
+
+  function normalizeSoundMode(mode) {
+    if (mode === "custom" || mode === "iphone1" || mode === "iphone2") return mode;
+    return "builtin";
+  }
 
   let statusTimer = 0;
 
@@ -72,12 +85,20 @@
   }
 
   function paintSound(mode, name) {
-    const custom = mode === "custom" && name;
-    soundModeLabel.textContent = custom ? "Kendi sesiniz" : "Dahili siren";
+    const normalized = normalizeSoundMode(mode);
+    const custom = normalized === "custom" && name;
+    soundModeLabel.textContent = custom ? SOUND_LABELS.custom : SOUND_LABELS[normalized];
     soundFileName.textContent = custom
       ? name
-      : "Varsayılan yüksek siren kullanılır.";
-    clearSoundBtn.disabled = !custom;
+      : normalized === "iphone1"
+        ? "iPhone Radar tarzı tekrarlayan zil."
+        : normalized === "iphone2"
+          ? "iPhone marimba tarzı alarm zili."
+          : "Varsayılan yüksek siren kullanılır.";
+    clearSoundBtn.disabled = normalized === "builtin";
+    for (const btn of soundPresetButtons) {
+      btn.classList.toggle("active", btn.dataset.sound === normalized);
+    }
   }
 
   async function save(patch) {
@@ -102,7 +123,7 @@
     updateMuteLabel(Number(stored.mutedUntil) || 0);
     globalThis.WaitAlarmPlayer?.configure({
       volume: Number(stored.volume) || 1,
-      soundMode: stored.soundMode === "custom" ? "custom" : "builtin",
+      soundMode: normalizeSoundMode(stored.soundMode),
       customSoundDataUrl: local.customSoundDataUrl || ""
     });
   }
@@ -192,8 +213,10 @@
   }
 
   function configurePlayerFromUi(extra = {}) {
+    const activeSound = soundPresetButtons.find((btn) => btn.classList.contains("active"));
     globalThis.WaitAlarmPlayer?.configure({
       volume: Number(volumeEl.value) / 100,
+      soundMode: extra.soundMode || activeSound?.dataset.sound || "builtin",
       ...extra
     });
   }
@@ -220,6 +243,18 @@
       const value = Number(btn.dataset.threshold);
       paintThreshold(value);
       save({ alarmThresholdSeconds: value });
+    });
+  }
+
+  for (const btn of soundPresetButtons) {
+    btn.addEventListener("click", async () => {
+      const mode = btn.dataset.sound;
+      showSoundError("");
+      await save({ soundMode: mode });
+      paintSound(mode, "");
+      configurePlayerFromUi({ soundMode: mode, customSoundDataUrl: "" });
+      globalThis.WaitAlarmPlayer?.unlock();
+      globalThis.WaitAlarmPlayer?.test(2400);
     });
   }
 

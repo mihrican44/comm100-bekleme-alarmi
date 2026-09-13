@@ -49,12 +49,19 @@ async function ensureDefaults() {
   }
   if (Number(current.settingsVersion) !== 2) {
     patch.volume = DEFAULT_SETTINGS.volume;
-    patch.soundMode = current.soundMode === "custom" ? "custom" : "builtin";
+    patch.soundMode = current.soundMode === "custom" || current.soundMode === "iphone1" || current.soundMode === "iphone2"
+      ? current.soundMode
+      : "builtin";
     patch.settingsVersion = 2;
   } else if (!Number.isFinite(Number(current.volume)) || current.volume < 0 || current.volume > 1) {
     patch.volume = DEFAULT_SETTINGS.volume;
   }
-  if (current.soundMode !== "custom" && current.soundMode !== "builtin") {
+  if (
+    current.soundMode !== "custom"
+    && current.soundMode !== "builtin"
+    && current.soundMode !== "iphone1"
+    && current.soundMode !== "iphone2"
+  ) {
     patch.soundMode = DEFAULT_SETTINGS.soundMode;
   }
   if (!Number.isFinite(Number(current.mutedUntil))) patch.mutedUntil = 0;
@@ -182,7 +189,9 @@ async function loadAlarmConfig() {
   }
   return {
     volume: Number(stored.volume) || 0,
-    soundMode: stored.soundMode === "custom" ? "custom" : "builtin",
+    soundMode: stored.soundMode === "custom" || stored.soundMode === "iphone1" || stored.soundMode === "iphone2"
+      ? stored.soundMode
+      : "builtin",
     customSoundDataUrl: local.customSoundDataUrl || "",
     mutedUntil: Number(stored.mutedUntil) || 0,
     enabled: stored.enabled !== false

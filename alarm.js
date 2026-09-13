@@ -27,19 +27,30 @@
     return false;
   }
 
-  function builtinSoundUrl() {
+  function packagedSoundUrl(mode) {
+    const files = {
+      builtin: "sounds/alarm.wav",
+      iphone1: "sounds/iphone1.wav",
+      iphone2: "sounds/iphone2.wav"
+    };
+    const file = files[mode] || files.builtin;
     try {
       if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
-        return chrome.runtime.getURL("sounds/alarm.wav");
+        return chrome.runtime.getURL(file);
       }
     } catch {
       /* demo veya geçersiz bağlam */
     }
     try {
-      return new URL("../sounds/alarm.wav", document.baseURI || location.href).href;
+      return new URL("../" + file, document.baseURI || location.href).href;
     } catch {
-      return "sounds/alarm.wav";
+      return file;
     }
+  }
+
+  function normalizeSoundMode(mode) {
+    if (mode === "custom" || mode === "iphone1" || mode === "iphone2") return mode;
+    return "builtin";
   }
 
   const player = {
@@ -78,7 +89,7 @@
     configure(next) {
       if (!next || typeof next !== "object") return;
       if (Number.isFinite(Number(next.volume))) this.volume = clamp(Number(next.volume), 0, 1);
-      if (next.soundMode === "custom" || next.soundMode === "builtin") this.soundMode = next.soundMode;
+      if (next.soundMode) this.soundMode = normalizeSoundMode(next.soundMode);
       if (typeof next.customSoundDataUrl === "string") this.customSoundDataUrl = next.customSoundDataUrl;
       if (this.audioEl) this.audioEl.volume = this.volume;
       if (this.master && this.ctx) {
@@ -99,7 +110,7 @@
 
     activeSource() {
       if (this.soundMode === "custom" && this.customSoundDataUrl) return this.customSoundDataUrl;
-      return builtinSoundUrl();
+      return packagedSoundUrl(this.soundMode);
     },
 
     sirenGain() {

@@ -140,7 +140,9 @@
         : DEFAULT_SETTINGS.alarmThresholdSeconds,
       volume: Number.isFinite(volume) ? clamp(volume, 0, 1) : DEFAULT_SETTINGS.volume,
       mutedUntil: Number.isFinite(mutedUntil) ? mutedUntil : 0,
-      soundMode: source.soundMode === "custom" ? "custom" : "builtin",
+      soundMode: source.soundMode === "custom" || source.soundMode === "iphone1" || source.soundMode === "iphone2"
+        ? source.soundMode
+        : "builtin",
       customSoundDataUrl: typeof source.customSoundDataUrl === "string" ? source.customSoundDataUrl : ""
     };
   }

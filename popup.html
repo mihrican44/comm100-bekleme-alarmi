@@ -362,11 +362,16 @@
         <span class="label">Alarm sesi</span>
         <span id="soundModeLabel" class="value">Dahili siren</span>
       </div>
-      <p class="meta" id="soundFileName">Varsayılan yüksek siren kullanılır.</p>
+      <div class="presets" role="group" aria-label="Hazır ziller" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 8px;">
+        <button type="button" data-sound="builtin">Siren</button>
+        <button type="button" data-sound="iphone1">iPhone 1</button>
+        <button type="button" data-sound="iphone2">iPhone 2</button>
+      </div>
+      <p class="meta" id="soundFileName">Varsayılan yüksek siren. iPhone 1 Radar tarzı, iPhone 2 marimba tarzı zildir.</p>
       <p class="meta" id="soundError" style="color: var(--rose); display: none; margin-top: 6px;"></p>
       <div class="actions" style="margin-top: 8px;">
         <button id="pickSound" type="button">Ses dosyası ekle</button>
-        <button id="clearSound" type="button">Dahili sese dön</button>
+        <button id="clearSound" type="button">Sirene dön</button>
       </div>
       <input id="soundFile" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac" hidden />
       <p class="meta" style="margin-top:8px">MP3, WAV veya OGG. En fazla 2 MB. Konsola bir kez tıklayın, sonra “Alarmı dene”.</p>

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Mesaj Süre Takip",
   "short_name": "Süre Takip",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Canlı sohbet listesindeki yanıtsız mesaj süresini izler ve eşik aşılınca sesli uyarı verir.",
   "minimum_chrome_version": "114",
   "icons": {
@@ -42,7 +42,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["sounds/alarm.wav"],
+      "resources": ["sounds/alarm.wav", "sounds/iphone1.wav", "sounds/iphone2.wav"],
       "matches": [
         "https://*.lively-chat.com/*",
         "https://lively-chat.com/*"
