@@ -301,7 +301,7 @@
       if (!isChatWatchUrl(tab.url || "")) return;
       await chrome.scripting.executeScript({
         target: { tabId: tab.id, allFrames: false },
-        files: ["alarm.js", "content.js"]
+        files: ["content.js"]
       });
     } catch {
       /* host izni yoksa veya restricted sayfa */

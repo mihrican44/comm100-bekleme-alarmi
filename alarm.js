@@ -16,6 +16,17 @@
     return Math.min(max, Math.max(min, value));
   }
 
+  function canStartAudio() {
+    try {
+      if (String(location.protocol || "") === "chrome-extension:") return true;
+      const activation = navigator.userActivation;
+      if (activation && (activation.isActive || activation.hasBeenActive)) return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+
   function builtinSoundUrl() {
     try {
       if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
@@ -98,6 +109,7 @@
     ensureContext() {
       const Ctx = globalThis.AudioContext || globalThis.webkitAudioContext;
       if (!Ctx) return null;
+      if (!canStartAudio()) return this.ctx && this.ctx.state !== "closed" ? this.ctx : null;
       if (!this.ctx || this.ctx.state === "closed") {
         try {
           this.ctx = new Ctx();
@@ -126,7 +138,7 @@
     },
 
     unlock() {
-      // Eşik dolmadan asla alarm dosyasını çalma; yalnızca ses bağlamını aç.
+      if (!canStartAudio()) return;
       const ctx = this.ensureContext();
       if (!ctx) return;
       if (ctx.state === "suspended") ctx.resume().catch(() => {});

@@ -808,7 +808,7 @@
   }
 
   function bindAudioUnlock() {
-    if (pointerUnlockHandler) return;
+    if (isExtensionContext || pointerUnlockHandler) return;
     pointerUnlockHandler = () => globalThis.Comm100AlarmPlayer?.unlock();
     document.addEventListener("pointerdown", pointerUnlockHandler, { passive: true });
     document.addEventListener("keydown", pointerUnlockHandler, { passive: true });
