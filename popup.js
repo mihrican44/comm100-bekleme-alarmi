@@ -131,6 +131,13 @@
     }
 
     offConsoleEl.classList.remove("show");
+    const stale = !status?.alive || !status?.lastSeenMs || Date.now() - Number(status.lastSeenMs) > 8000;
+    if (stale) {
+      statePillEl.textContent = "Bağlı değil";
+      statePillEl.className = "pill idle";
+      statusMetaEl.textContent = "Bu sekmede tarama yok. Konsolu yenileyin, eklentiyi Yenile’ye basın.";
+      return;
+    }
     if (alarmActive) {
       statePillEl.textContent = "Alarm";
       statePillEl.className = "pill alarm";
@@ -151,7 +158,7 @@
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const url = tab?.url || "";
-      onConsole = /lively-chat\.com|comm100\.com|comm100app\.com/i.test(url);
+      onConsole = /lively-chat\.com|comm100\.com|comm100app\.com|comm100\.io|comm100\.net/i.test(url);
     } catch {
       onConsole = false;
     }
@@ -270,8 +277,25 @@
     globalThis.Comm100AlarmPlayer?.stop();
   });
 
+  async function injectIntoActiveTab() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames: true },
+        files: ["alarm.js", "content.js"]
+      });
+    } catch {
+      /* host izni yoksa veya restricted sayfa */
+    }
+  }
+
   load()
-    .then(() => refreshStatus())
+    .then(async () => {
+      await injectIntoActiveTab();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return refreshStatus();
+    })
     .catch(() => {});
   statusTimer = window.setInterval(() => {
     refreshStatus().catch(() => {});

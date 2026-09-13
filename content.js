@@ -365,6 +365,76 @@
     }
   }
 
+  function scanPageText(bucket) {
+    let text = "";
+    try {
+      text = `${document.body ? document.body.innerText : ""} ${document.title || ""}`;
+    } catch {
+      return;
+    }
+    if (!text) return;
+    const hits = extractTimesFromText(text.slice(0, 30000));
+    let best = 0;
+    let raw = "";
+    for (const hit of hits) {
+      if (!isDurationToken(hit.raw)) continue;
+      if (hit.parsedSeconds > best) {
+        best = hit.parsedSeconds;
+        raw = hit.raw;
+      }
+    }
+    if (best > 0) {
+      bucket.push({
+        key: "pagetext:duration",
+        parsedSeconds: best,
+        score: 5,
+        isWait: true,
+        raw
+      });
+    }
+  }
+
+  function scanPseudoAndAttrs(root, bucket) {
+    let nodes;
+    try {
+      nodes = root.querySelectorAll ? root.querySelectorAll("*") : [];
+    } catch {
+      return;
+    }
+    const limit = Math.min(nodes.length, 2000);
+    for (let i = 0; i < limit; i += 1) {
+      const el = nodes[i];
+      if (isSkippable(el)) continue;
+      const blobs = [];
+      try {
+        blobs.push(el.ownerDocument.defaultView.getComputedStyle(el, "::before").content);
+        blobs.push(el.ownerDocument.defaultView.getComputedStyle(el, "::after").content);
+      } catch {
+        /* ignore */
+      }
+      if (el.attributes) {
+        for (let a = 0; a < el.attributes.length && a < 20; a += 1) {
+          blobs.push(el.attributes[a].value);
+        }
+      }
+      for (const blob of blobs) {
+        if (!blob || blob === "none" || blob === "normal") continue;
+        const cleaned = String(blob).replace(/^["']|["']$/g, "");
+        const hits = extractTimesFromText(cleaned);
+        for (const hit of hits) {
+          if (!isDurationToken(hit.raw) && hit.kind !== "duration") continue;
+          bucket.push({
+            key: `${elementPathKey(el)}::pseudo#${hit.index}`,
+            parsedSeconds: hit.parsedSeconds,
+            score: 5,
+            isWait: true,
+            raw: hit.raw
+          });
+        }
+      }
+    }
+  }
+
   async function readComm100ApiWaits() {
     const api = globalThis.Comm100AgentConsoleAPI;
     if (!api || typeof api.get !== "function") return [];
@@ -539,7 +609,9 @@
           maxWaitTimeSeconds,
           matchCount,
           alarmActive,
-          threshold: settings.alarmThresholdSeconds
+          threshold: settings.alarmThresholdSeconds,
+          alive: true,
+          href: String(location.href || "")
         },
         () => void chrome.runtime.lastError
       );
@@ -565,7 +637,9 @@
       for (const root of roots) {
         scanTextNodes(root, matches);
         scanAttributeTimes(root, matches);
+        scanPseudoAndAttrs(root, matches);
       }
+      scanPageText(matches);
 
       const apiWaits = await readComm100ApiWaits();
       if (apiWaits.length) {
@@ -590,13 +664,7 @@
         if (lastAlarmActive || sawReset) silenceAlarm(true);
       }
 
-      if (
-        maxWaitTimeSeconds !== lastMaxWait ||
-        matchCount !== lastMatchCount ||
-        alarmActive !== lastAlarmActive
-      ) {
-        publishStatus(maxWaitTimeSeconds, matchCount, alarmActive);
-      }
+      publishStatus(maxWaitTimeSeconds, matchCount, alarmActive);
     } finally {
       scanning = false;
       if (scanQueued && !destroyed) {

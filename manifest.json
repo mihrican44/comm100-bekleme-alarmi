@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Comm100 Bekleme Alarmı",
   "short_name": "Wait Alarm",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Comm100 canlı destek panelinde yanıtlanmayan müşteri mesajlarını izler ve eşik aşıldığında sesli uyarı verir.",
   "minimum_chrome_version": "114",
   "icons": {
@@ -23,22 +23,31 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "activeTab", "unlimitedStorage"],
+  "permissions": ["storage", "activeTab", "unlimitedStorage", "scripting"],
   "host_permissions": [
     "https://*.lively-chat.com/*",
+    "https://lively-chat.com/*",
     "https://*.comm100.com/*",
-    "https://*.comm100app.com/*"
+    "https://comm100.com/*",
+    "https://*.comm100app.com/*",
+    "https://*.comm100.io/*",
+    "https://*.comm100.net/*"
   ],
   "content_scripts": [
     {
       "matches": [
         "https://*.lively-chat.com/*",
+        "https://lively-chat.com/*",
         "https://*.comm100.com/*",
-        "https://*.comm100app.com/*"
+        "https://comm100.com/*",
+        "https://*.comm100app.com/*",
+        "https://*.comm100.io/*",
+        "https://*.comm100.net/*"
       ],
       "js": ["alarm.js", "content.js"],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": true,
+      "match_about_blank": true
     }
   ],
   "web_accessible_resources": [
@@ -46,8 +55,12 @@
       "resources": ["sounds/alarm.wav"],
       "matches": [
         "https://*.lively-chat.com/*",
+        "https://lively-chat.com/*",
         "https://*.comm100.com/*",
-        "https://*.comm100app.com/*"
+        "https://comm100.com/*",
+        "https://*.comm100app.com/*",
+        "https://*.comm100.io/*",
+        "https://*.comm100.net/*"
       ]
     }
   ]

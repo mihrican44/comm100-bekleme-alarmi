@@ -60,20 +60,24 @@ function aggregateFrames(frames) {
   let maxWaitTimeSeconds = 0;
   let matchCount = 0;
   let alarmActive = false;
+  let lastSeenMs = 0;
+  let alive = false;
 
   for (const state of frames.values()) {
     matchCount += state.matchCount;
     maxWaitTimeSeconds = Math.max(maxWaitTimeSeconds, state.maxWaitTimeSeconds);
     alarmActive = alarmActive || state.alarmActive;
+    if (state.updatedAt > lastSeenMs) lastSeenMs = state.updatedAt;
+    alive = alive || Boolean(state.alive);
   }
 
-  return { maxWaitTimeSeconds, matchCount, alarmActive, watchedTabs: 1 };
+  return { maxWaitTimeSeconds, matchCount, alarmActive, watchedTabs: 1, lastSeenMs, alive };
 }
 
 function aggregateTab(tabId) {
   const frames = tabFrames.get(tabId);
   if (!frames || frames.size === 0) {
-    return { maxWaitTimeSeconds: 0, matchCount: 0, alarmActive: false, watchedTabs: 0 };
+    return { maxWaitTimeSeconds: 0, matchCount: 0, alarmActive: false, watchedTabs: 0, lastSeenMs: 0, alive: false };
   }
   return aggregateFrames(frames);
 }
@@ -84,6 +88,8 @@ function aggregateAll() {
   let matchCount = 0;
   let alarmActive = false;
   let watchedTabs = 0;
+  let lastSeenMs = 0;
+  let alive = false;
 
   for (const frames of tabFrames.values()) {
     if (frames.size === 0) continue;
@@ -92,9 +98,11 @@ function aggregateAll() {
     matchCount += part.matchCount;
     maxWaitTimeSeconds = Math.max(maxWaitTimeSeconds, part.maxWaitTimeSeconds);
     alarmActive = alarmActive || part.alarmActive;
+    lastSeenMs = Math.max(lastSeenMs, part.lastSeenMs || 0);
+    alive = alive || Boolean(part.alive);
   }
 
-  return { maxWaitTimeSeconds, matchCount, alarmActive, watchedTabs };
+  return { maxWaitTimeSeconds, matchCount, alarmActive, watchedTabs, lastSeenMs, alive };
 }
 
 function formatBadgeText(seconds) {
@@ -157,6 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         maxWaitTimeSeconds: Math.max(0, Number(message.maxWaitTimeSeconds) || 0),
         matchCount: Math.max(0, Number(message.matchCount) || 0),
         alarmActive: Boolean(message.alarmActive),
+        alive: true,
         updatedAt: Date.now()
       });
       refreshBadge(tabId);
