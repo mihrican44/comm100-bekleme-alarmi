@@ -39,7 +39,7 @@
    * Uzun formattan kısaya: hh:mm:ss, mm:ss, Xm Ys, Xm / Xdk, Xs.
    */
   const TIME_REGEX =
-    /(?:(?<!\d)(\d{1,2}):([0-5]\d):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,3}):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS](?![a-zA-Z]))|(?:(?<!\d)(\d{1,4})\s*(?:m(?:in)?|dk)(?!\s*\d)(?![a-zA-Z]))|(?:(?<!\d)(\d{1,5})\s*[sS](?![a-zA-Z]))/g;
+    /(?:(?<!\d)(\d{1,2}):([0-5]\d):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,3}):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,4})m(\d{1,2})s(?![a-zA-Z]))|(?:(?<!\d)(\d{1,4})m(?![a-zA-Z]))|(?:(?<!\d)(\d{1,5})s(?![a-zA-Z]))/g;
 
   const settings = {
     enabled: DEFAULT_SETTINGS.enabled,
@@ -104,19 +104,24 @@
       return Number(match[1]) * 60 + Number(match[2]);
     }
 
-    match = text.match(/^(?:(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS])$/);
+    match = text.match(/^(?:(\d{1,4})m(\d{1,2})s)$/i);
     if (match) {
       return Number(match[1]) * 60 + Number(match[2]);
     }
 
-    match = text.match(/^(?:(\d{1,4})\s*(?:m(?:in)?|dk))$/i);
+    match = text.match(/^(?:(\d{1,4})m)$/i);
     if (match) {
       return Number(match[1]) * 60;
     }
 
-    match = text.match(/^(?:(\d{1,5})\s*[sS])$/);
+    match = text.match(/^(?:(\d{1,5})s)$/i);
     if (match) {
       return Number(match[1]);
+    }
+
+    match = text.match(/^(?:(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS])$/);
+    if (match) {
+      return Number(match[1]) * 60 + Number(match[2]);
     }
 
     return -1;
@@ -203,23 +208,26 @@
     return chunks.filter(Boolean).join(" ");
   }
 
+  function isCompactBadge(raw) {
+    return /^\d{1,4}m(?:\d{1,2}s)?$|^\d{1,5}s$/i.test(String(raw || "").trim());
+  }
+
   function isDurationToken(raw) {
-    return /^\d+\s*(?:m(?:in)?|dk|s)(?:\s+\d+\s*s)?$/i.test(String(raw || "").trim());
+    return isCompactBadge(raw);
   }
 
   function scoreMatch(el, parsedSeconds, raw) {
     let score = 1;
     const ctx = nearbyContext(el);
     const attrBlob = ctx;
-    const durationToken = isDurationToken(raw) || (typeof raw === "string" && /^\d+\s*(?:m(?:in)?|dk|s)(?:\s+\d+\s*s)?$/i.test(raw.trim()));
-    const listHint = CHAT_LIST_HINT.test(ctx) || CHAT_LIST_HINT.test(safeText(el && el.textContent).slice(0, 120));
+    const durationToken = isCompactBadge(raw);
+    const listHint = CHAT_LIST_HINT.test(ctx);
     const waitHint = POSITIVE_HINT.test(ctx);
-    let isWait = waitHint || durationToken || listHint;
+    const infoDuration = /\bmin(?:ute)?s?\b|\bvisits\b|\bsession\b|\bcustom field\b/i.test(ctx);
+    let isWait = durationToken || ((waitHint || listHint) && !infoDuration);
 
-    if (/^\d{1,2}:[0-5]\d$/.test(String(raw || "")) && !waitHint && !listHint) {
-      isWait = false;
-    }
-    if (NEGATIVE_HINT.test(ctx) && !durationToken) isWait = false;
+    if (/^\d{1,2}:[0-5]\d$/.test(String(raw || ""))) isWait = false;
+    if (infoDuration && !durationToken) isWait = false;
 
     if (isWait) score += 3;
     if (NEGATIVE_HINT.test(ctx)) score -= 2;
@@ -270,7 +278,7 @@
       if (match[1] !== undefined) raw = `${match[1]}:${match[2]}:${match[3]}`;
       else if (match[4] !== undefined) raw = `${match[4]}:${match[5]}`;
       else if (match[6] !== undefined) {
-        raw = `${match[6]}m ${match[7]}s`;
+        raw = `${match[6]}m${match[7]}s`;
         kind = "duration";
       } else if (match[8] !== undefined) {
         raw = `${match[8]}m`;
@@ -351,6 +359,8 @@
         if (!blob) continue;
         const hits = extractTimesFromText(blob);
         for (const hit of hits) {
+          if (!isCompactBadge(hit.raw)) continue;
+          if (isIgnoredDurationContext(el)) continue;
           const ranked = scoreMatch(el, hit.parsedSeconds, hit.raw);
           if (ranked.score <= 0 || !ranked.isWait) continue;
           bucket.push({
@@ -365,29 +375,73 @@
     }
   }
 
-  function scanPageText(bucket) {
-    let text = "";
+  function nearbySnippet(el) {
+    if (!el) return "";
+    const chunks = [];
+    let node = el;
+    let depth = 0;
+    while (node && node.nodeType === Node.ELEMENT_NODE && depth < 4) {
+      chunks.push(safeText(node.getAttribute && node.getAttribute("aria-label")));
+      chunks.push(safeText(node.getAttribute && node.getAttribute("title")));
+      if (depth <= 2) {
+        chunks.push(safeText(node.innerText || node.textContent).slice(0, 160));
+      }
+      node = node.parentElement;
+      depth += 1;
+    }
+    return chunks.filter(Boolean).join(" ");
+  }
+
+  /**
+   * Sağdaki Info oturum süresi ("53 min 43 s") ve benzeri paneller
+   * sol listedeki 12s/2m rozeti değildir.
+   */
+  function isIgnoredDurationContext(el) {
+    const snippet = nearbySnippet(el);
+    if (/\b\d+\s+min(?:ute)?s?\b/i.test(snippet)) return true;
+    if (/\b(custom field|custom variable|referred from|campaign)\b/i.test(snippet)) return true;
+    return false;
+  }
+
+  function compactLabelOf(el) {
+    if (!el) return "";
+    let own = "";
+    const children = el.childNodes;
+    if (children) {
+      for (let i = 0; i < children.length; i += 1) {
+        const child = children[i];
+        if (child.nodeType === Node.TEXT_NODE) own += child.nodeValue || "";
+      }
+    }
+    own = own.trim();
+    if (isCompactBadge(own)) return own;
+    if (el.children && el.children.length === 0) {
+      const leaf = String(el.innerText || el.textContent || "").trim();
+      if (isCompactBadge(leaf)) return leaf;
+    }
+    return "";
+  }
+
+  function scanIsolatedCompactBadges(root, bucket) {
+    let nodes;
     try {
-      text = `${document.body ? document.body.innerText : ""} ${document.title || ""}`;
+      nodes = root.querySelectorAll ? root.querySelectorAll("*") : [];
     } catch {
       return;
     }
-    if (!text) return;
-    const hits = extractTimesFromText(text.slice(0, 30000));
-    let best = 0;
-    let raw = "";
-    for (const hit of hits) {
-      if (!isDurationToken(hit.raw)) continue;
-      if (hit.parsedSeconds > best) {
-        best = hit.parsedSeconds;
-        raw = hit.raw;
-      }
-    }
-    if (best > 0) {
+    const limit = Math.min(nodes.length, 4000);
+    for (let i = 0; i < limit; i += 1) {
+      const el = nodes[i];
+      if (isSkippable(el)) continue;
+      const raw = compactLabelOf(el);
+      if (!raw) continue;
+      if (isIgnoredDurationContext(el)) continue;
+      const parsedSeconds = parseTimeToSeconds(raw);
+      if (parsedSeconds <= 0 || parsedSeconds > MAX_REASONABLE_SECONDS) continue;
       bucket.push({
-        key: "pagetext:duration",
-        parsedSeconds: best,
-        score: 5,
+        key: `${elementPathKey(el)}#badge`,
+        parsedSeconds,
+        score: 8,
         isWait: true,
         raw
       });
@@ -422,7 +476,8 @@
         const cleaned = String(blob).replace(/^["']|["']$/g, "");
         const hits = extractTimesFromText(cleaned);
         for (const hit of hits) {
-          if (!isDurationToken(hit.raw) && hit.kind !== "duration") continue;
+          if (!isCompactBadge(hit.raw)) continue;
+          if (isIgnoredDurationContext(el)) continue;
           bucket.push({
             key: `${elementPathKey(el)}::pseudo#${hit.index}`,
             parsedSeconds: hit.parsedSeconds,
@@ -435,44 +490,20 @@
     }
   }
 
-  async function readComm100ApiWaits() {
-    const api = globalThis.Comm100AgentConsoleAPI;
-    if (!api || typeof api.get !== "function") return [];
-
-    try {
-      const result = await Promise.race([
-        api.get("agentconsole.currentChat"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 400))
-      ]);
-      const chat = result && result.data;
-      if (!chat) return [];
-      if (String(chat.status || "").toLowerCase().includes("end")) return [];
-
-      const waits = [];
-      const status = String(chat.status || "").toLowerCase();
-      if (status.includes("wait") && Number.isFinite(Number(chat.waitingTime))) {
-        waits.push(Number(chat.waitingTime));
-      }
-
-      if (Array.isArray(chat.messages) && chat.messages.length) {
-        let lastVisitor = 0;
-        let lastAgent = 0;
-        for (const message of chat.messages) {
-          const stamp = Number(message.time) || 0;
-          if (message.senderType === "visitor") lastVisitor = Math.max(lastVisitor, stamp);
-          if (message.senderType === "agent") lastAgent = Math.max(lastAgent, stamp);
-        }
-        if (lastVisitor && lastVisitor >= lastAgent) {
-          const nowUnix = Date.now() / 1000;
-          const elapsed = Math.floor(nowUnix - lastVisitor);
-          if (elapsed >= 0 && elapsed <= MAX_REASONABLE_SECONDS) waits.push(elapsed);
-        }
-      }
-
-      return waits.filter((n) => n >= 0 && n <= MAX_REASONABLE_SECONDS);
-    } catch {
-      return [];
+  function dedupeWaitMatches(matches) {
+    const byKey = new Map();
+    for (const match of matches) {
+      if (!match || !match.isWait || !isCompactBadge(match.raw)) continue;
+      if (match.parsedSeconds <= 0) continue;
+      const key = String(match.key || "")
+        .replace(/#badge$/, "")
+        .replace(/@attr#.*$/, "")
+        .replace(/::pseudo#.*$/, "")
+        .replace(/#.*$/, "") || match.key;
+      const prev = byKey.get(key);
+      if (!prev || match.parsedSeconds > prev.parsedSeconds) byKey.set(key, match);
     }
+    return [...byKey.values()];
   }
 
   function updateTrackers(matches) {
@@ -551,9 +582,13 @@
   }
 
   function noteAgentReply() {
-    replyQuietUntil = Date.now() + 1600;
+    replyQuietUntil = Date.now() + 1500;
+    trackers.clear();
+    lastMaxWait = 0;
+    lastMatchCount = 0;
+    lastAlarmActive = false;
     silenceAlarm(true);
-    scanOnce().catch(() => {});
+    publishStatus(0, 0, false);
   }
 
   function looksLikeComposer(el) {
@@ -635,25 +670,13 @@
 
       const roots = collectRootList(doc);
       for (const root of roots) {
-        scanTextNodes(root, matches);
+        scanIsolatedCompactBadges(root, matches);
         scanAttributeTimes(root, matches);
         scanPseudoAndAttrs(root, matches);
       }
-      scanPageText(matches);
 
-      const apiWaits = await readComm100ApiWaits();
-      if (apiWaits.length) {
-        const seconds = Math.max(...apiWaits);
-        matches.push({
-          key: "comm100-api:current",
-          parsedSeconds: seconds,
-          score: 6,
-          isWait: true,
-          raw: `${seconds}s`
-        });
-      }
-
-      const { maxWaitTimeSeconds, matchCount, sawReset } = updateTrackers(matches);
+      const compactMatches = dedupeWaitMatches(matches);
+      const { maxWaitTimeSeconds, matchCount, sawReset } = updateTrackers(compactMatches);
       if (sawReset) replyQuietUntil = Math.max(replyQuietUntil, Date.now() + 1200);
 
       const alarmActive = shouldRing(maxWaitTimeSeconds);
@@ -803,6 +826,7 @@
   globalThis.Comm100WaitAlarm = {
     parseTimeToSeconds,
     extractTimesFromText,
+    isCompactBadge,
     getStatus() {
       return {
         maxWaitTimeSeconds: lastMaxWait,

@@ -25,7 +25,9 @@ Kod güncellenince aynı sayfada eklentinin üzerindeki **Yenile** (dairesel ok)
 4. Eşiği ayarlayın (ör. 60 / 90 / 120 sn). İsterseniz kendi MP3/WAV dosyanızı ekleyin.
 5. **Alarmı dene** ile sesi kontrol edin.
 
-Müşteri mesajı eşiği aşınca siren çalar. Temsilci yanıtlayınca durur.
+Müşteri mesajı eşiği aşınca siren çalar. Temsilci yanıtlayınca sol listedeki sayaç 0 olur; eklenti de 0’a iner ve alarm durur. Sağdaki Info’daki `53 min 43 s` gibi oturum süresi kullanılmaz.
+
+Ses yoksa popup’ta **ses düzeyi %0** olmasın; en az %50 yapıp konsola bir kez tıklayın.
 
 ## Çalışmazsa
 

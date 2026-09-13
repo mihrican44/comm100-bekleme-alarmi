@@ -1,6 +1,6 @@
 # Comm100 Bekleme Alarmı
 
-Comm100 canlı destek **ajan konsolunda** yanıtsız müşteri süresini izleyen Chrome eklentisi. Eşik aşılınca yüksek siren çalar.
+Comm100 canlı destek **ajan konsolunda** yanıtsız müşteri süresini izleyen Chrome eklentisi. Kaynak **yalnızca sol listedeki** `12s` / `2m` rozetidir. Sağdaki Info oturum süresi (`53 min 43 s`) yok sayılır. Temsilci yanıtlayınca sayaç **0** olur. Eşik aşılınca yüksek siren çalar.
 
 **Günlük kullanım için demo sayfası gerekmez.** Eklentiyi Chrome’a yükleyip paneli açın: [KURULUM.md](KURULUM.md)
 
@@ -20,16 +20,19 @@ Comm100 canlı destek **ajan konsolunda** yanıtsız müşteri süresini izleyen
 - **Alarmı dene:** test tonu
 - **5 dk sessiz:** geçici susturma
 
-Eşik dolana kadar sessizdir. Temsilci yanıtlayınca, sayaç düşünce veya sohbet kapanınca alarm kesilir.
+Eşik dolana kadar sessizdir. Temsilci yanıtlayınca sol rozet sıfırlanır; eklenti de **0** gösterir ve alarm kesilir.
 
 ## Desteklenen zaman biçimleri
 
+Yalnızca sol listedeki kompakt rozetler:
+
 | Biçim | Örnek | Saniye |
 | --- | --- | --- |
-| `mm:ss` | `02:15` | 135 |
-| `hh:mm:ss` | `1:02:03` | 3723 |
-| `Xm Ys` | `2m 15s` | 135 |
-| `Xs` | `45s` | 45 |
+| `Xs` | `12s` | 12 |
+| `Xm` | `2m` | 120 |
+| `XmYs` | `2m15s` | 135 |
+
+Yok sayılanlar: Info paneli `53 min 43 s`, mesaj saati `02:01`, sohbet süresi.
 
 ## Mimari
 

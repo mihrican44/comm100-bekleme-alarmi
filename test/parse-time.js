@@ -38,7 +38,7 @@ sandbox.window = sandbox.window;
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
 
-const { parseTimeToSeconds, extractTimesFromText } = sandbox.Comm100WaitAlarm;
+const { parseTimeToSeconds, extractTimesFromText, isCompactBadge } = sandbox.Comm100WaitAlarm;
 const cases = [
   ["02:15", 135],
   ["1:02:03", 3723],
@@ -46,7 +46,7 @@ const cases = [
   ["2m 15s", 135],
   ["2m15s", 135],
   ["45s", 45],
-  ["1dk", 60],
+  ["12s", 12],
   ["0:00", 0],
   ["bogus", -1],
   ["24:00:00", -1]
@@ -66,6 +66,47 @@ const seconds = extracted.map((item) => item.parsedSeconds).sort((a, b) => a - b
 if (JSON.stringify(seconds) !== JSON.stringify([45, 120, 135, 3723])) {
   failed += 1;
   console.error("extractTimesFromText mismatch", extracted);
+}
+
+const infoPanel = extractTimesFromText("53 min 43 s");
+const infoSecs = infoPanel.map((item) => item.parsedSeconds);
+if (infoSecs.includes(43) || infoSecs.includes(3180) || infoSecs.includes(43 + 53 * 60)) {
+  failed += 1;
+  console.error("info panel duration should be ignored", infoPanel);
+}
+
+const compactCases = [
+  ["12s", true],
+  ["2m", true],
+  ["2m15s", true],
+  ["43 s", false],
+  ["53 min", false],
+  ["53 min 43 s", false],
+  ["0:43", false],
+  ["02:01", false],
+  ["43s", true]
+];
+for (const [input, expected] of compactCases) {
+  const actual = Boolean(isCompactBadge(input));
+  if (actual !== expected) {
+    failed += 1;
+    console.error(`isCompactBadge(${input}) => ${actual}, expected ${expected}`);
+  }
+}
+
+const mixedPage = extractTimesFromText(
+  "Chats Ongoing 1 test 12s Canlı Destek Info 53 min 43 s Session 2 Visits"
+);
+const compactFromPage = mixedPage.filter((item) => isCompactBadge(item.raw)).map((item) => item.parsedSeconds);
+if (!compactFromPage.includes(12) || compactFromPage.includes(43) || compactFromPage.includes(3180)) {
+  failed += 1;
+  console.error("mixed page should keep 12s and drop Info duration", mixedPage);
+}
+
+const two = extractTimesFromText("badge 2m15s on the list");
+if (!two.some((item) => item.raw === "2m15s" && item.parsedSeconds === 135)) {
+  failed += 1;
+  console.error("2m15s compact raw should stay unspaced", two);
 }
 
 if (failed) {

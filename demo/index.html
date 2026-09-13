@@ -52,14 +52,17 @@
       .status-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
       .big { font-size: 28px; font-weight: 700; }
       .hint { color: var(--muted); font-size: 12px; }
-      .switch { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; }
+      .info-block { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 16px 14px; }
+      .info-block dt { color: var(--muted); font-size: 11px; margin-top: 8px; }
+      .info-block dd { margin: 2px 0 0; font-weight: 650; }
+      .info-duration { color: #fbbf24; font-variant-numeric: tabular-nums; }
     </style>
   </head>
   <body>
     <header>
       <div>
         <h1>Comm100 Ajan Konsolu — Demo</h1>
-        <p class="sub">Yanıtsız müşteri süreleri artar. Eşik aşılınca yüksek siren çalar; kendi sesinizi de ekleyebilirsiniz.</p>
+        <p class="sub">Sol listedeki 12s / 2m rozeti gerçek kaynaktır. Sağdaki Info oturum süresi yok sayılır. Yanıtlayınca rozet 0 olur.</p>
       </div>
       <div class="hint">Bu sayfa tarayıcıda eklenti mantığını test etmek içindir. Gerçek panelde yüklenmiş Chrome eklentisi kullanılır.</div>
     </header>
@@ -78,6 +81,16 @@
         </div>
       </section>
       <aside class="col settings">
+        <h2>Info</h2>
+        <div class="info-block">
+          <div class="name" id="infoName">Mert Demir</div>
+          <dt>Oturum süresi (yok sayılmalı)</dt>
+          <dd class="info-duration" id="sessionDuration">53 min 43 s</dd>
+          <dt>Visits</dt>
+          <dd>2 Visits</dd>
+          <dt>Custom Field</dt>
+          <dd>ADINIZ test</dd>
+        </div>
         <h2>Alarm ayarları</h2>
         <div class="status-card">
           <div class="hint">Algılanan en yüksek bekleme</div>
@@ -120,7 +133,9 @@
       const maxWaitEl = document.getElementById("maxWait");
       const scanMetaEl = document.getElementById("scanMeta");
 
-      function fmt(sec) {
+      let sessionSeconds = 53 * 60 + 43;
+
+      function fmtClock(sec) {
         const m = Math.floor(sec / 60);
         const s = sec % 60;
         if (m >= 60) {
@@ -128,6 +143,21 @@
           return `${h}:${String(m % 60).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
         }
         return `${m}:${String(s).padStart(2, "0")}`;
+      }
+
+      function fmtBadge(sec) {
+        const seconds = Math.max(0, Math.floor(Number(sec) || 0));
+        if (seconds <= 0) return "";
+        if (seconds < 60) return `${seconds}s`;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return s ? `${m}m${s}s` : `${m}m`;
+      }
+
+      function fmtSession(sec) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m} min ${s} s`;
       }
 
       function render() {
@@ -140,7 +170,7 @@
           el.innerHTML = `
             <div class="chat-top">
               <span class="name">${chat.name}</span>
-              <span class="wait" data-wait="${chat.wait}" aria-label="${waiting ? "waiting " : "duration "}${fmt(chat.wait)}">${waiting ? fmt(chat.wait) : "0:00"}</span>
+              <span class="wait">${waiting ? fmtBadge(chat.wait) : ""}</span>
             </div>
             <div class="preview">${waiting ? "Yanıt bekleniyor · " : "Temsilci yazdı · "}${chat.preview}</div>
           `;
@@ -155,9 +185,9 @@
           return;
         }
         threadEl.innerHTML = `
-          <div class="bubble visitor">Merhaba, yardıma ihtiyacım var.</div>
-          ${chat.lastFrom === "agent" ? '<div class="bubble agent">Tabii, hemen bakıyorum.</div>' : `<div class="bubble visitor">${chat.preview}</div>`}
-          <p class="hint">Bekleme sayacı: <strong aria-label="waiting ${fmt(chat.wait)}">${chat.lastFrom === "visitor" ? fmt(chat.wait) : "0s"}</strong></p>
+          <div class="bubble visitor">Merhaba, yardıma ihtiyacım var. <span class="hint">01:54</span></div>
+          ${chat.lastFrom === "agent" ? '<div class="bubble agent">Tabii, hemen bakıyorum. <span class="hint">02:01</span></div>' : `<div class="bubble visitor">${chat.preview}</div>`}
+          <p class="hint">${chat.lastFrom === "visitor" ? "Müşteri yanıt bekliyor." : "Temsilci yanıt verdi; sol rozet 0."}</p>
         `;
       }
 
@@ -257,14 +287,20 @@
         for (const chat of chats) {
           if (chat.open && chat.lastFrom === "visitor") chat.wait += 1;
         }
+        sessionSeconds += 1;
         render();
+        const chat = chats.find((c) => c.id === selected);
+        const infoName = document.getElementById("infoName");
+        const sessionEl = document.getElementById("sessionDuration");
+        if (infoName) infoName.textContent = chat ? chat.name : "—";
+        if (sessionEl) sessionEl.textContent = fmtSession(sessionSeconds);
         const api = window.Comm100WaitAlarm;
         if (api) {
           const st = api.getStatus();
-          maxWaitEl.textContent = fmt(st.maxWaitTimeSeconds || 0);
+          maxWaitEl.textContent = fmtClock(st.maxWaitTimeSeconds || 0);
           scanMetaEl.textContent = st.alarmActive
             ? "Alarm çalıyor · eşik aşıldı"
-            : `${st.matchCount || 0} sayaç izleniyor`;
+            : `${st.matchCount || 0} sol rozet izleniyor`;
         }
       }, 1000);
 

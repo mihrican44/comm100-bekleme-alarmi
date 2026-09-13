@@ -141,15 +141,15 @@
     if (alarmActive) {
       statePillEl.textContent = "Alarm";
       statePillEl.className = "pill alarm";
-      statusMetaEl.textContent = `${matches} aktif sayaç · eşik aşıldı`;
+      statusMetaEl.textContent = `${matches} sol liste rozeti · eşik aşıldı`;
     } else if (maxWait > 0) {
       statePillEl.textContent = "İzleniyor";
       statePillEl.className = "pill";
-      statusMetaEl.textContent = `${matches} aktif sayaç izleniyor`;
+      statusMetaEl.textContent = `${matches} sol liste rozeti izleniyor`;
     } else {
       statePillEl.textContent = "Beklemede";
       statePillEl.className = "pill idle";
-      statusMetaEl.textContent = "Yanıtsız bekleme sayacı yok";
+      statusMetaEl.textContent = "Sol listede yanıtsız rozet yok · sayaç 0";
     }
   }
 
