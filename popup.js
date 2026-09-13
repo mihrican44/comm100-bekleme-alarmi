@@ -117,41 +117,46 @@
   }
 
   function paintStatus(status, onChats) {
-    if (!onChats) {
+    const maxWait = Number(status?.maxWaitTimeSeconds) || 0;
+    const matches = Number(status?.matchCount) || 0;
+    const alarmActive = Boolean(status?.alarmActive);
+    const watching = Boolean(status?.alive && Number(status?.watchedTabs) > 0);
+    const lastSeen = Number(status?.lastSeenMs) || 0;
+    const stale = !watching || !lastSeen || Date.now() - lastSeen > 90_000;
+
+    if (!onChats && !watching) {
       waitValueEl.innerHTML = `0<span>sn</span>`;
       statePillEl.textContent = "Konsol yok";
       statePillEl.className = "pill idle";
-      statusMetaEl.textContent = "Açık sekme sohbet ekranı değil (agentconsole/chats)";
+      statusMetaEl.textContent = "Sohbet sekmesi açık değil. Chats ekranını açık bırakın; diğer sekmelerde de arkada izler.";
       offConsoleEl.classList.add("show");
       return;
     }
 
-    const maxWait = Number(status?.maxWaitTimeSeconds) || 0;
-    const matches = Number(status?.matchCount) || 0;
-    const alarmActive = Boolean(status?.alarmActive);
-
     waitValueEl.innerHTML = `${formatSeconds(maxWait)}<span>${maxWait >= 60 ? "dk:sn" : "sn"}</span>`;
-
     offConsoleEl.classList.remove("show");
-    const stale = !status?.alive || !status?.lastSeenMs || Date.now() - Number(status.lastSeenMs) > 8000;
+
+    const behind = onChats ? "" : " · sohbet sekmesi arkada";
     if (stale) {
       statePillEl.textContent = "Bağlı değil";
       statePillEl.className = "pill idle";
-      statusMetaEl.textContent = "Bu sekmede tarama yok. Konsolu yenileyin, eklentiyi Yenile’ye basın.";
+      statusMetaEl.textContent = "Sohbet sekmesi yanıt vermiyor. Chats sekmesini açık tutun, eklentiyi Yenile’ye basın.";
       return;
     }
     if (alarmActive) {
       statePillEl.textContent = "Alarm";
       statePillEl.className = "pill alarm";
-      statusMetaEl.textContent = `${matches} sol liste rozeti · eşik aşıldı`;
+      statusMetaEl.textContent = `${matches} sol liste rozeti · eşik aşıldı${behind}`;
     } else if (maxWait > 0) {
-      statePillEl.textContent = "İzleniyor";
+      statePillEl.textContent = onChats ? "İzleniyor" : "Arkada";
       statePillEl.className = "pill";
-      statusMetaEl.textContent = `${matches} sol liste rozeti izleniyor`;
+      statusMetaEl.textContent = `${matches} sol liste rozeti izleniyor${behind}`;
     } else {
-      statePillEl.textContent = "Beklemede";
+      statePillEl.textContent = onChats ? "Beklemede" : "Arkada";
       statePillEl.className = "pill idle";
-      statusMetaEl.textContent = "Sol listede yanıtsız rozet yok · sayaç 0";
+      statusMetaEl.textContent = onChats
+        ? "Sol listede yanıtsız rozet yok · sayaç 0"
+        : "Sohbet sekmesi arkada izleniyor · sayaç 0";
     }
   }
 
@@ -166,10 +171,8 @@
 
   async function refreshStatus() {
     let onChats = false;
-    let tabId;
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = tab?.id;
       onChats = isChatWatchUrl(tab?.url || "");
     } catch {
       onChats = false;
@@ -177,8 +180,7 @@
 
     try {
       const status = await chrome.runtime.sendMessage({
-        type: "GET_WATCH_STATUS",
-        tabId
+        type: "GET_WATCH_STATUS"
       });
       paintStatus(status, onChats);
     } catch {

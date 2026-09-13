@@ -1,7 +1,7 @@
 /**
  * Comm100 Bekleme Alarmı — Manifest V3 service worker.
- * Sekme ve frame bazlı tarama sonuçlarını birleştirir, rozeti günceller,
- * varsayılan ayarları yazar. DOM taraması ve ses üretimi content.js'tedir.
+ * Sohbet sekmesi arkadayken taramayı canlı tutar, rozeti günceller,
+ * alarmı offscreen belgede çalar (Chrome gizli sekmede sesi keser).
  */
 
 const DEFAULT_SETTINGS = Object.freeze({
@@ -13,14 +13,35 @@ const DEFAULT_SETTINGS = Object.freeze({
   settingsVersion: 2
 });
 
+const CHAT_TAB_URLS = [
+  "https://*.lively-chat.com/*",
+  "https://lively-chat.com/*",
+  "https://*.comm100.com/*",
+  "https://comm100.com/*",
+  "https://*.comm100app.com/*",
+  "https://*.comm100.io/*",
+  "https://*.comm100.net/*"
+];
+
 /**
  * tabId -> (frameId -> snapshot)
  * @type {Map<number, Map<number, { maxWaitTimeSeconds: number, matchCount: number, alarmActive: boolean, updatedAt: number }>>}
  */
 const tabFrames = new Map();
 
+let offscreenPlaying = false;
+
 function isValidThreshold(value) {
   return Number.isFinite(value) && value >= 5 && value <= 3600;
+}
+
+function isChatWatchUrl(href) {
+  const blob = String(href || "").toLowerCase();
+  if (/\/demo\/|badge-reset\.html/i.test(blob)) return true;
+  if (/\/agentconsole\/agents\b|\/agentconsole\/report|\/agentconsole\/setting|\/agentconsole\/monitor/.test(blob)) {
+    return false;
+  }
+  return /\/agentconsole\/chats\b/.test(blob);
 }
 
 async function ensureDefaults() {
@@ -46,7 +67,7 @@ async function ensureDefaults() {
   if (Object.keys(patch).length) await chrome.storage.sync.set(patch);
 }
 
-function pruneStale(maxAgeMs = 30_000) {
+function pruneStale(maxAgeMs = 120_000) {
   const now = Date.now();
   for (const [tabId, frames] of tabFrames) {
     for (const [frameId, state] of frames) {
@@ -112,45 +133,153 @@ function formatBadgeText(seconds) {
   return `${Math.floor(seconds / 3600)}h`;
 }
 
-async function refreshBadge(tabId) {
-  const state = aggregateTab(tabId);
+async function refreshGlobalBadge() {
+  const state = aggregateAll();
   try {
-    if (state.maxWaitTimeSeconds <= 0) {
-      await chrome.action.setBadgeText({ tabId, text: "" });
-      return;
+    await chrome.action.setBadgeText({ text: formatBadgeText(state.maxWaitTimeSeconds) });
+    if (state.maxWaitTimeSeconds > 0) {
+      await chrome.action.setBadgeBackgroundColor({
+        color: state.alarmActive ? "#E11D48" : "#0F766E"
+      });
+      await chrome.action.setBadgeTextColor({ color: "#FFFFFF" });
     }
-
-    await chrome.action.setBadgeText({
-      tabId,
-      text: formatBadgeText(state.maxWaitTimeSeconds)
-    });
-    await chrome.action.setBadgeBackgroundColor({
-      tabId,
-      color: state.alarmActive ? "#E11D48" : "#0F766E"
-    });
-    await chrome.action.setBadgeTextColor({ tabId, color: "#FFFFFF" });
   } catch {
-    tabFrames.delete(tabId);
+    /* ignore */
   }
+}
+
+async function ensureOffscreen() {
+  if (!chrome.offscreen?.createDocument) return false;
+  try {
+    const contexts = await chrome.runtime.getContexts?.({
+      contextTypes: ["OFFSCREEN_DOCUMENT"]
+    });
+    if (contexts && contexts.length) return true;
+  } catch {
+    /* getContexts yok */
+  }
+  try {
+    await chrome.offscreen.createDocument({
+      url: "offscreen.html",
+      reasons: ["AUDIO_PLAYBACK"],
+      justification: "Sohbet sekmesi arkadayken bekleme alarmını çalmak"
+    });
+    return true;
+  } catch (error) {
+    const text = String(error && error.message ? error.message : error);
+    if (/already exists|only one offscreen/i.test(text)) return true;
+    return false;
+  }
+}
+
+async function loadAlarmConfig() {
+  const stored = await chrome.storage.sync.get({
+    volume: 1,
+    soundMode: "builtin",
+    mutedUntil: 0,
+    enabled: true
+  });
+  let local = { customSoundDataUrl: "" };
+  try {
+    local = await chrome.storage.local.get({ customSoundDataUrl: "" });
+  } catch {
+    local = { customSoundDataUrl: "" };
+  }
+  return {
+    volume: Number(stored.volume) || 0,
+    soundMode: stored.soundMode === "custom" ? "custom" : "builtin",
+    customSoundDataUrl: local.customSoundDataUrl || "",
+    mutedUntil: Number(stored.mutedUntil) || 0,
+    enabled: stored.enabled !== false
+  };
+}
+
+async function startOffscreenAlarm() {
+  const config = await loadAlarmConfig();
+  if (!config.enabled || Date.now() < config.mutedUntil) {
+    await stopOffscreenAlarm();
+    return;
+  }
+  const ok = await ensureOffscreen();
+  if (!ok) return;
+  offscreenPlaying = true;
+  chrome.runtime.sendMessage({
+    type: "OFFSCREEN_PLAY",
+    config: {
+      volume: config.volume,
+      soundMode: config.soundMode,
+      customSoundDataUrl: config.customSoundDataUrl
+    }
+  }).catch(() => {});
+}
+
+async function stopOffscreenAlarm() {
+  if (!offscreenPlaying) return;
+  offscreenPlaying = false;
+  chrome.runtime.sendMessage({ type: "OFFSCREEN_STOP" }).catch(() => {});
+}
+
+async function pingChatTabs() {
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: CHAT_TAB_URLS });
+  } catch {
+    return;
+  }
+  for (const tab of tabs) {
+    if (!tab?.id || !isChatWatchUrl(tab.url || "")) continue;
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "SCAN_NOW" });
+    } catch {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["alarm.js", "content.js"]
+        });
+      } catch {
+        /* sekme kısıtlı */
+      }
+    }
+  }
+}
+
+function ensureWatchAlarm() {
+  if (!chrome.alarms?.create) return;
+  chrome.alarms.create("comm100-watch", { periodInMinutes: 0.5 });
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureDefaults().catch(() => {});
+  ensureWatchAlarm();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureDefaults().catch(() => {});
+  ensureWatchAlarm();
+});
+
+ensureWatchAlarm();
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm && alarm.name === "comm100-watch") {
+    pingChatTabs().catch(() => {});
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabFrames.delete(tabId);
+  refreshGlobalBadge().catch(() => {});
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading") {
     tabFrames.delete(tabId);
-    chrome.action.setBadgeText({ tabId, text: "" }).catch(() => {});
   }
+  refreshGlobalBadge().catch(() => {});
+});
+
+chrome.storage.onChanged.addListener(() => {
+  if (offscreenPlaying) startOffscreenAlarm().catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -158,6 +287,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "WAIT_SCAN_RESULT") {
     const tabId = sender.tab?.id;
+    const href = message.href || sender.tab?.url || "";
+    if (typeof tabId === "number" && !isChatWatchUrl(href)) {
+      tabFrames.delete(tabId);
+      refreshGlobalBadge().catch(() => {});
+      stopOffscreenAlarm().catch(() => {});
+      sendResponse({ ok: true });
+      return true;
+    }
     if (typeof tabId === "number") {
       const frameId = typeof sender.frameId === "number" ? sender.frameId : 0;
       if (!tabFrames.has(tabId)) tabFrames.set(tabId, new Map());
@@ -168,26 +305,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         alive: true,
         updatedAt: Date.now()
       });
-      refreshBadge(tabId);
+      refreshGlobalBadge().catch(() => {});
+      if (message.alarmActive) startOffscreenAlarm().catch(() => {});
+      else stopOffscreenAlarm().catch(() => {});
     }
     sendResponse({ ok: true });
     return true;
   }
 
-  if (message.type === "SILENCE_ALARM") {
+  if (message.type === "PLAY_ALARM") {
+    startOffscreenAlarm().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
+  if (message.type === "SILENCE_ALARM" || message.type === "STOP_ALARM") {
+    stopOffscreenAlarm().catch(() => {});
     const tabId = sender.tab?.id;
     if (typeof tabId === "number") {
-      const frames = tabFrames.get(tabId);
-      if (frames) {
-        for (const state of frames.values()) {
-          state.alarmActive = false;
-          state.maxWaitTimeSeconds = 0;
-          state.matchCount = 0;
-          state.updatedAt = Date.now();
-        }
-      }
       chrome.tabs.sendMessage(tabId, { type: "SILENCE_ALARM" }).catch(() => {});
-      refreshBadge(tabId);
     }
     sendResponse({ ok: true });
     return true;
@@ -195,12 +330,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "GET_WATCH_STATUS") {
     pruneStale();
-    const tabId = Number(message.tabId);
-    if (Number.isFinite(tabId)) {
-      sendResponse(aggregateTab(tabId));
-    } else {
-      sendResponse(aggregateAll());
-    }
+    sendResponse(aggregateAll());
     return true;
   }
 

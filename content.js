@@ -598,12 +598,28 @@
 
   const alarmSynth = {
     start() {
+      if (isExtensionContext) {
+        try {
+          chrome.runtime.sendMessage({ type: "PLAY_ALARM" }, () => void chrome.runtime.lastError);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       globalThis.Comm100AlarmPlayer?.start();
     },
     stop() {
+      if (isExtensionContext) {
+        try {
+          chrome.runtime.sendMessage({ type: "STOP_ALARM" }, () => void chrome.runtime.lastError);
+        } catch {
+          /* ignore */
+        }
+      }
       globalThis.Comm100AlarmPlayer?.stop();
     },
     dispose() {
+      this.stop();
       globalThis.Comm100AlarmPlayer?.dispose();
     }
   };
@@ -671,8 +687,13 @@
   function bindRuntimeSilence() {
     if (!isExtensionContext || !chrome.runtime?.onMessage || runtimeListener) return;
     runtimeListener = (message) => {
-      if (message && message.type === "SILENCE_ALARM") {
-        alarmSynth.stop();
+      if (!message || typeof message !== "object") return;
+      if (message.type === "SCAN_NOW") {
+        scanOnce().catch(() => {});
+        return;
+      }
+      if (message.type === "SILENCE_ALARM") {
+        globalThis.Comm100AlarmPlayer?.stop();
       }
     };
     chrome.runtime.onMessage.addListener(runtimeListener);
@@ -726,9 +747,6 @@
         idleScan("off-chats");
         return;
       }
-      if (document.visibilityState === "hidden") {
-        return;
-      }
       if (pageHasNoChats(doc)) {
         idleScan("empty");
         return;
@@ -763,7 +781,6 @@
 
   function scheduleScan() {
     if (destroyed) return;
-    if (document.visibilityState === "hidden") return;
     if (!isPrimaryFrame() || !isChatWatchUrl(location.href)) return;
     if (scanning) {
       scanQueued = true;
@@ -881,12 +898,9 @@
     }, SCAN_INTERVAL_MS);
 
     visibilityHandler = () => {
-      if (document.visibilityState !== "visible") {
-        alarmSynth.stop();
-        return;
+      if (document.visibilityState === "visible") {
+        scanOnce().catch(() => {});
       }
-      trackers.clear();
-      scanOnce().catch(() => {});
     };
     document.addEventListener("visibilitychange", visibilityHandler);
 

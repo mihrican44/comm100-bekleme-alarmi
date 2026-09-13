@@ -20,7 +20,7 @@ Comm100 canlı destek **ajan konsolunda** yanıtsız müşteri süresini izleyen
 - **Alarmı dene:** test tonu
 - **5 dk sessiz:** geçici susturma
 
-Eşik dolana kadar sessizdir. Temsilci yanıtlayınca sol rozet sıfırlanır; eklenti de **0** gösterir ve alarm kesilir. Sayaç yalnızca **sohbet ekranında** (`/agentconsole/chats`) çalışır; Agents veya başka sekmeye geçince durur.
+Eşik dolana kadar sessizdir. Temsilci yanıtlayınca sol rozet sıfırlanır; eklenti de **0** gösterir ve alarm kesilir. Sayaç **sohbet ekranında** (`/agentconsole/chats`) çalışır; o sekme açık kaldığı sürece diğer sekmelerde gezerken de arkada izler ve alarm çalar.
 
 ## Desteklenen zaman biçimleri
 

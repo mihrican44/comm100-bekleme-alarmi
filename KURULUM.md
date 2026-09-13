@@ -19,11 +19,13 @@ Kod güncellenince aynı sayfada eklentinin üzerindeki **Yenile** (dairesel ok)
 
 ## 3. Gerçek paneli açın
 
-1. [https://dash15.lively-chat.com/agentconsole/chats](https://dash15.lively-chat.com/agentconsole/chats) adresine girin ve oturum açın. Sayaç yalnızca bu **sohbet ekranında** çalışır (Agents listesinde değil).
+1. [https://dash15.lively-chat.com/agentconsole/chats](https://dash15.lively-chat.com/agentconsole/chats) adresine girin ve oturum açın.
 2. Konsol sayfasına **bir kez tıklayın** (Chrome sesi kilitlemesin diye).
 3. Araç çubuğundaki eklenti simgesine tıklayın.
 4. Eşiği ayarlayın (ör. 60 / 90 / 120 sn). İsterseniz kendi MP3/WAV dosyanızı ekleyin.
 5. **Alarmı dene** ile sesi kontrol edin.
+
+Sohbet sekmesini **kapatmayın**. Başka sekmeye geçseniz de eklenti bu ekranı arkada izler; eşik aşılınca siren çalar.
 
 Müşteri mesajı eşiği aşınca siren çalar. Temsilci yanıtlayınca sol listedeki sayaç 0 olur; eklenti de 0’a iner ve alarm durur. Sağdaki Info’daki `53 min 43 s` gibi oturum süresi kullanılmaz.
 
