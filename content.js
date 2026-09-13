@@ -26,19 +26,20 @@
   });
 
   const POSITIVE_HINT =
-    /\b(wait(?:ing)?|unanswered|pending|queue|queued|idle|unreplied|response\s*time|agent\s*idle|yan[ıi]t\s*bek|bekliyor|cevaplanmad[ıi]|kuyruk)\b/i;
+    /\b(wait(?:ing)?|unanswered|pending|queue|queued|idle|unreplied|response\s*time|agent\s*idle|yan[ıi]t\s*bek|bekliyor|cevaplanmad[ıi]|kuyruk|ongoing|unread)\b/i;
+  const CHAT_LIST_HINT =
+    /\b(ongoing|chats|inbox|conversation|canl[ıi]|unread|queue|waiting)\b/i;
   const NEGATIVE_HINT =
-    /\b(duration|unresponsive|visitor\s*idle|local\s*time|timestamp|ended|closed|chat\s*time|s[uü]re\s*toplam|ziyaret[cç]i\s*idle|temsilci\s*yazd|yan[ıi]t\s*verdi)\b/i;
+    /\b(unresponsive|visitor\s*idle|local\s*time|timestamp|ended|closed|local time|temsilci\s*yazd|yan[ıi]t\s*verdi)\b/i;
   const ATTR_POSITIVE = /wait|timer|elapsed|unanswered|queue|pending|idle|countdown/i;
   const ATTR_NEGATIVE = /duration|unresponsive|timestamp|clock|localtime|ended/i;
   const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT", "CODE", "PRE", "SVG", "MATH"]);
 
   /**
-   * Uzun formattan kısaya: hh:mm:ss, mm:ss, Xm Ys, Xs.
-   * Lookahead/lookbehind ile kelime içi sahte eşleşmeler elenir.
+   * Uzun formattan kısaya: hh:mm:ss, mm:ss, Xm Ys, Xm / Xdk, Xs.
    */
   const TIME_REGEX =
-    /(?:(?<!\d)(\d{1,2}):([0-5]\d):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,3}):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS](?![a-zA-Z]))|(?:(?<!\d)(\d{1,5})\s*[sS](?![a-zA-Z]))/g;
+    /(?:(?<!\d)(\d{1,2}):([0-5]\d):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,3}):([0-5]\d)(?!\d))|(?:(?<!\d)(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS](?![a-zA-Z]))|(?:(?<!\d)(\d{1,4})\s*(?:m(?:in)?|dk)(?!\s*\d)(?![a-zA-Z]))|(?:(?<!\d)(\d{1,5})\s*[sS](?![a-zA-Z]))/g;
 
   const settings = {
     enabled: DEFAULT_SETTINGS.enabled,
@@ -106,6 +107,11 @@
     match = text.match(/^(?:(\d{1,4})\s*[mM]\s*(\d{1,2})\s*[sS])$/);
     if (match) {
       return Number(match[1]) * 60 + Number(match[2]);
+    }
+
+    match = text.match(/^(?:(\d{1,4})\s*(?:m(?:in)?|dk))$/i);
+    if (match) {
+      return Number(match[1]) * 60;
     }
 
     match = text.match(/^(?:(\d{1,5})\s*[sS])$/);
@@ -181,38 +187,43 @@
 
   function nearbyContext(el) {
     if (!el) return "";
-    const chunks = [
-      safeText(el.textContent).slice(0, 180),
-      safeText(el.getAttribute && el.getAttribute("aria-label")),
-      safeText(el.getAttribute && el.getAttribute("title")),
-      safeText(el.id),
-      safeText(typeof el.className === "string" ? el.className : "")
-    ];
-    const parent = el.parentElement;
-    if (parent) {
-      chunks.push(safeText(parent.getAttribute("aria-label")));
-      chunks.push(safeText(parent.getAttribute("title")));
-      chunks.push(safeText(parent.id));
-      chunks.push(safeText(typeof parent.className === "string" ? parent.className : ""));
-    }
-    const grand = parent && parent.parentElement;
-    if (grand) {
-      chunks.push(safeText(grand.getAttribute("aria-label")));
-      chunks.push(safeText(grand.id));
-      chunks.push(safeText(typeof grand.className === "string" ? grand.className : ""));
+    const chunks = [];
+    let node = el;
+    let depth = 0;
+    if (el) chunks.push(safeText(el.textContent).slice(0, 80));
+    while (node && node.nodeType === Node.ELEMENT_NODE && depth < 6) {
+      chunks.push(safeText(node.getAttribute && node.getAttribute("aria-label")));
+      chunks.push(safeText(node.getAttribute && node.getAttribute("title")));
+      chunks.push(safeText(node.id));
+      chunks.push(safeText(typeof node.className === "string" ? node.className : ""));
+      if (depth <= 2) chunks.push(safeText(node.textContent).slice(0, 220));
+      node = node.parentElement;
+      depth += 1;
     }
     return chunks.filter(Boolean).join(" ");
   }
 
-  function scoreMatch(el, parsedSeconds) {
+  function isDurationToken(raw) {
+    return /^\d+\s*(?:m(?:in)?|dk|s)(?:\s+\d+\s*s)?$/i.test(String(raw || "").trim());
+  }
+
+  function scoreMatch(el, parsedSeconds, raw) {
     let score = 1;
     const ctx = nearbyContext(el);
     const attrBlob = ctx;
-    const isWait = POSITIVE_HINT.test(ctx);
+    const durationToken = isDurationToken(raw) || (typeof raw === "string" && /^\d+\s*(?:m(?:in)?|dk|s)(?:\s+\d+\s*s)?$/i.test(raw.trim()));
+    const listHint = CHAT_LIST_HINT.test(ctx) || CHAT_LIST_HINT.test(safeText(el && el.textContent).slice(0, 120));
+    const waitHint = POSITIVE_HINT.test(ctx);
+    let isWait = waitHint || durationToken || listHint;
+
+    if (/^\d{1,2}:[0-5]\d$/.test(String(raw || "")) && !waitHint && !listHint) {
+      isWait = false;
+    }
+    if (NEGATIVE_HINT.test(ctx) && !durationToken) isWait = false;
 
     if (isWait) score += 3;
-    if (NEGATIVE_HINT.test(ctx)) score -= 4;
-    if (ATTR_NEGATIVE.test(attrBlob)) score -= 3;
+    if (NEGATIVE_HINT.test(ctx)) score -= 2;
+    if (ATTR_NEGATIVE.test(attrBlob) && !durationToken) score -= 3;
     if (parsedSeconds >= 1 && parsedSeconds <= settings.alarmThresholdSeconds * 12) score += 1;
     if (parsedSeconds > 3 * 60 * 60) score -= 2;
     return { score, isWait };
@@ -255,14 +266,23 @@
     let match;
     while ((match = TIME_REGEX.exec(text)) !== null) {
       let raw;
+      let kind = "clock";
       if (match[1] !== undefined) raw = `${match[1]}:${match[2]}:${match[3]}`;
       else if (match[4] !== undefined) raw = `${match[4]}:${match[5]}`;
-      else if (match[6] !== undefined) raw = `${match[6]}m ${match[7]}s`;
-      else raw = `${match[8]}s`;
+      else if (match[6] !== undefined) {
+        raw = `${match[6]}m ${match[7]}s`;
+        kind = "duration";
+      } else if (match[8] !== undefined) {
+        raw = `${match[8]}m`;
+        kind = "duration";
+      } else {
+        raw = `${match[9]}s`;
+        kind = "duration";
+      }
 
       const parsedSeconds = parseTimeToSeconds(raw);
       if (parsedSeconds >= 0 && parsedSeconds <= MAX_REASONABLE_SECONDS) {
-        found.push({ raw, parsedSeconds, index: match.index });
+        found.push({ raw, parsedSeconds, index: match.index, kind });
       }
       if (TIME_REGEX.lastIndex === match.index) TIME_REGEX.lastIndex += 1;
     }
@@ -292,7 +312,7 @@
       if (hits.length) {
         const el = current.parentElement;
         for (const hit of hits) {
-          const ranked = scoreMatch(el, hit.parsedSeconds);
+          const ranked = scoreMatch(el, hit.parsedSeconds, hit.raw);
           if (ranked.score <= 0 || !ranked.isWait) continue;
           bucket.push({
             key: `${elementPathKey(el)}#${hit.index}`,
@@ -331,7 +351,7 @@
         if (!blob) continue;
         const hits = extractTimesFromText(blob);
         for (const hit of hits) {
-          const ranked = scoreMatch(el, hit.parsedSeconds);
+          const ranked = scoreMatch(el, hit.parsedSeconds, hit.raw);
           if (ranked.score <= 0 || !ranked.isWait) continue;
           bucket.push({
             key: `${elementPathKey(el)}@attr#${hit.index}`,
