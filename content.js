@@ -212,6 +212,51 @@
     return /^\d{1,4}m(?:\d{1,2}s)?$|^\d{1,5}s$/i.test(String(raw || "").trim());
   }
 
+  /**
+   * Yalnızca canlı sohbet ekranı: /agentconsole/chats
+   * Agents, GitHub, raporlar taranmaz. Demo sayfası serbesttir.
+   */
+  function isChatWatchUrl(href) {
+    const blob = String(href || "").toLowerCase();
+    if (/\/demo\/|badge-reset\.html/i.test(blob)) return true;
+    if (/\/agentconsole\/agents\b|\/agentconsole\/report|\/agentconsole\/setting|\/agentconsole\/monitor/.test(blob)) {
+      return false;
+    }
+    return /\/agentconsole\/chats\b/.test(blob);
+  }
+
+  function isPrimaryFrame() {
+    try {
+      return window.self === window.top;
+    } catch {
+      return true;
+    }
+  }
+
+  function pageHasNoChats(doc) {
+    try {
+      const text = String((doc && doc.body && doc.body.innerText) || "").slice(0, 8000);
+      return /you have no chats now|şu anda sohbetiniz yok/i.test(text);
+    } catch {
+      return false;
+    }
+  }
+
+  function isAgentDirectoryContext(el) {
+    const snippet = nearbySnippet(el);
+    return /\b(all available|agents\b|away:\s*\d|online\s+\d+\s+away)\b/i.test(snippet);
+  }
+
+  function isLeftChatRail(el) {
+    try {
+      const box = el.getBoundingClientRect();
+      if (!box || box.width < 4 || box.height < 4) return false;
+      return box.left < 560;
+    } catch {
+      return true;
+    }
+  }
+
   function isDurationToken(raw) {
     return isCompactBadge(raw);
   }
@@ -433,6 +478,8 @@
     for (let i = 0; i < limit; i += 1) {
       const el = nodes[i];
       if (isSkippable(el)) continue;
+      if (isAgentDirectoryContext(el)) continue;
+      if (!isLeftChatRail(el)) continue;
       const raw = compactLabelOf(el);
       if (!raw) continue;
       if (isIgnoredDurationContext(el)) continue;
@@ -656,6 +703,13 @@
     }
   }
 
+  function idleScan(reason) {
+    trackers.clear();
+    alarmSynth.stop();
+    publishStatus(0, 0, false);
+    return reason;
+  }
+
   async function scanOnce() {
     if (destroyed) return;
     if (scanning) {
@@ -668,11 +722,21 @@
       const doc = document;
       if (!doc || !doc.documentElement) return;
 
+      if (!isPrimaryFrame() || !isChatWatchUrl(location.href)) {
+        idleScan("off-chats");
+        return;
+      }
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      if (pageHasNoChats(doc)) {
+        idleScan("empty");
+        return;
+      }
+
       const roots = collectRootList(doc);
       for (const root of roots) {
         scanIsolatedCompactBadges(root, matches);
-        scanAttributeTimes(root, matches);
-        scanPseudoAndAttrs(root, matches);
       }
 
       const compactMatches = dedupeWaitMatches(matches);
@@ -699,6 +763,8 @@
 
   function scheduleScan() {
     if (destroyed) return;
+    if (document.visibilityState === "hidden") return;
+    if (!isPrimaryFrame() || !isChatWatchUrl(location.href)) return;
     if (scanning) {
       scanQueued = true;
       return;
@@ -815,12 +881,40 @@
     }, SCAN_INTERVAL_MS);
 
     visibilityHandler = () => {
-      if (document.visibilityState === "visible") scanOnce().catch(() => {});
+      if (document.visibilityState !== "visible") {
+        alarmSynth.stop();
+        return;
+      }
+      trackers.clear();
+      scanOnce().catch(() => {});
     };
     document.addEventListener("visibilitychange", visibilityHandler);
 
-    pageHideHandler = () => teardown();
-    window.addEventListener("pagehide", pageHideHandler, { once: true });
+    bindRouteWatch();
+  }
+
+  function bindRouteWatch() {
+    const onRoute = () => {
+      trackers.clear();
+      alarmSynth.stop();
+      scanOnce().catch(() => {});
+    };
+    window.addEventListener("popstate", onRoute);
+    const wrap = (method) => {
+      const original = history && history[method];
+      if (typeof original !== "function") return;
+      history[method] = function patchedHistory() {
+        const result = original.apply(this, arguments);
+        onRoute();
+        return result;
+      };
+    };
+    try {
+      wrap("pushState");
+      wrap("replaceState");
+    } catch {
+      /* ignore */
+    }
   }
 
   globalThis.Comm100WaitAlarm = {
@@ -829,6 +923,7 @@
     isCompactBadge,
     compactLabelOf,
     isIgnoredDurationContext,
+    isChatWatchUrl,
     getStatus() {
       return {
         maxWaitTimeSeconds: lastMaxWait,

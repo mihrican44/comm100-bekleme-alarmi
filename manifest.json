@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Comm100 Bekleme Alarmı",
   "short_name": "Wait Alarm",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Comm100 canlı destek panelinde yanıtlanmayan müşteri mesajlarını izler ve eşik aşıldığında sesli uyarı verir.",
   "minimum_chrome_version": "114",
   "icons": {
@@ -46,8 +46,8 @@
       ],
       "js": ["alarm.js", "content.js"],
       "run_at": "document_idle",
-      "all_frames": true,
-      "match_about_blank": true
+      "all_frames": false,
+      "match_about_blank": false
     }
   ],
   "web_accessible_resources": [

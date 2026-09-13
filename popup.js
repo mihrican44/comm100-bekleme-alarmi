@@ -116,19 +116,21 @@
     }
   }
 
-  function paintStatus(status, onConsole) {
+  function paintStatus(status, onChats) {
+    if (!onChats) {
+      waitValueEl.innerHTML = `0<span>sn</span>`;
+      statePillEl.textContent = "Konsol yok";
+      statePillEl.className = "pill idle";
+      statusMetaEl.textContent = "Açık sekme sohbet ekranı değil (agentconsole/chats)";
+      offConsoleEl.classList.add("show");
+      return;
+    }
+
     const maxWait = Number(status?.maxWaitTimeSeconds) || 0;
     const matches = Number(status?.matchCount) || 0;
     const alarmActive = Boolean(status?.alarmActive);
 
     waitValueEl.innerHTML = `${formatSeconds(maxWait)}<span>${maxWait >= 60 ? "dk:sn" : "sn"}</span>`;
-    if (!onConsole) {
-      statePillEl.textContent = "Konsol yok";
-      statePillEl.className = "pill idle";
-      statusMetaEl.textContent = "Açık sekmede ajan konsolu algılanmadı";
-      offConsoleEl.classList.add("show");
-      return;
-    }
 
     offConsoleEl.classList.remove("show");
     const stale = !status?.alive || !status?.lastSeenMs || Date.now() - Number(status.lastSeenMs) > 8000;
@@ -153,21 +155,34 @@
     }
   }
 
+  function isChatWatchUrl(href) {
+    const blob = String(href || "").toLowerCase();
+    if (/\/demo\/|badge-reset\.html/i.test(blob)) return true;
+    if (/\/agentconsole\/agents\b|\/agentconsole\/report|\/agentconsole\/setting|\/agentconsole\/monitor/.test(blob)) {
+      return false;
+    }
+    return /\/agentconsole\/chats\b/.test(blob);
+  }
+
   async function refreshStatus() {
-    let onConsole = false;
+    let onChats = false;
+    let tabId;
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const url = tab?.url || "";
-      onConsole = /lively-chat\.com|comm100\.com|comm100app\.com|comm100\.io|comm100\.net/i.test(url);
+      tabId = tab?.id;
+      onChats = isChatWatchUrl(tab?.url || "");
     } catch {
-      onConsole = false;
+      onChats = false;
     }
 
     try {
-      const status = await chrome.runtime.sendMessage({ type: "GET_WATCH_STATUS" });
-      paintStatus(status, onConsole || Boolean(status?.watchedTabs));
+      const status = await chrome.runtime.sendMessage({
+        type: "GET_WATCH_STATUS",
+        tabId
+      });
+      paintStatus(status, onChats);
     } catch {
-      paintStatus(null, onConsole);
+      paintStatus(null, onChats);
     }
 
     const stored = await chrome.storage.sync.get(["mutedUntil"]);
@@ -281,8 +296,9 @@
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return;
+      if (!isChatWatchUrl(tab.url || "")) return;
       await chrome.scripting.executeScript({
-        target: { tabId: tab.id, allFrames: true },
+        target: { tabId: tab.id, allFrames: false },
         files: ["alarm.js", "content.js"]
       });
     } catch {

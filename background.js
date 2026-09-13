@@ -194,7 +194,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "GET_WATCH_STATUS") {
-    sendResponse(aggregateAll());
+    pruneStale();
+    const tabId = Number(message.tabId);
+    if (Number.isFinite(tabId)) {
+      sendResponse(aggregateTab(tabId));
+    } else {
+      sendResponse(aggregateAll());
+    }
     return true;
   }
 

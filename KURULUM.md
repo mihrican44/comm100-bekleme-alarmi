@@ -19,7 +19,7 @@ Kod güncellenince aynı sayfada eklentinin üzerindeki **Yenile** (dairesel ok)
 
 ## 3. Gerçek paneli açın
 
-1. [https://dash15.lively-chat.com/agentconsole/](https://dash15.lively-chat.com/agentconsole/) adresine girin ve oturum açın.
+1. [https://dash15.lively-chat.com/agentconsole/chats](https://dash15.lively-chat.com/agentconsole/chats) adresine girin ve oturum açın. Sayaç yalnızca bu **sohbet ekranında** çalışır (Agents listesinde değil).
 2. Konsol sayfasına **bir kez tıklayın** (Chrome sesi kilitlemesin diye).
 3. Araç çubuğundaki eklenti simgesine tıklayın.
 4. Eşiği ayarlayın (ör. 60 / 90 / 120 sn). İsterseniz kendi MP3/WAV dosyanızı ekleyin.
