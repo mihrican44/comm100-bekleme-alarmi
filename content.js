@@ -827,6 +827,8 @@
     parseTimeToSeconds,
     extractTimesFromText,
     isCompactBadge,
+    compactLabelOf,
+    isIgnoredDurationContext,
     getStatus() {
       return {
         maxWaitTimeSeconds: lastMaxWait,

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>badge-reset</title>
+  </head>
+  <body>
+    <section id="list">
+      <h2>Chats</h2>
+      <p>Ongoing 1</p>
+      <article class="chat">
+        <span class="name">Ayşe</span>
+        <span class="wait" id="badgeA">18s</span>
+      </article>
+      <article class="chat">
+        <span class="name">test</span>
+        <span class="wait" id="badgeB">41s</span>
+      </article>
+    </section>
+    <aside id="info">
+      <h2>Info</h2>
+      <div>test</div>
+      <div id="session">53 min 43 s</div>
+      <div>Custom Field</div>
+      <div>2 Visits</div>
+    </aside>
+    <button id="reply" type="button">Yanıt gönder</button>
+    <pre id="phase1"></pre>
+    <pre id="phase2"></pre>
+    <script src="/demo/chrome-shim.js"></script>
+    <script src="/alarm.js"></script>
+    <script src="/content.js"></script>
+    <script>
+      function status() {
+        return window.Comm100WaitAlarm.getStatus();
+      }
+      window.__RESULTS__ = {};
+      setTimeout(() => {
+        window.__RESULTS__.before = status();
+        document.getElementById("phase1").textContent = JSON.stringify(window.__RESULTS__.before);
+        document.getElementById("badgeB").textContent = "";
+        document.getElementById("reply").click();
+        setTimeout(() => {
+          window.__RESULTS__.after = status();
+          document.getElementById("phase2").textContent = JSON.stringify(window.__RESULTS__.after);
+          document.title =
+            "WAIT " +
+            window.__RESULTS__.before.maxWaitTimeSeconds +
+            " -> " +
+            window.__RESULTS__.after.maxWaitTimeSeconds;
+        }, 400);
+      }, 400);
+    </script>
+  </body>
+</html>

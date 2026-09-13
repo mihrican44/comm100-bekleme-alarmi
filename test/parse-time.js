@@ -24,7 +24,7 @@ const sandbox = {
     removeEventListener() {}
   },
   NodeFilter: { SHOW_TEXT: 4, FILTER_REJECT: 2, FILTER_ACCEPT: 1 },
-  Node: { ELEMENT_NODE: 1 },
+  Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 },
   MutationObserver: class { observe() {} disconnect() {} },
   setInterval: () => 0,
   setTimeout: () => 0,
@@ -38,7 +38,13 @@ sandbox.window = sandbox.window;
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
 
-const { parseTimeToSeconds, extractTimesFromText, isCompactBadge } = sandbox.Comm100WaitAlarm;
+const {
+  parseTimeToSeconds,
+  extractTimesFromText,
+  isCompactBadge,
+  compactLabelOf,
+  isIgnoredDurationContext
+} = sandbox.Comm100WaitAlarm;
 const cases = [
   ["02:15", 135],
   ["1:02:03", 3723],
@@ -107,6 +113,52 @@ const two = extractTimesFromText("badge 2m15s on the list");
 if (!two.some((item) => item.raw === "2m15s" && item.parsedSeconds === 135)) {
   failed += 1;
   console.error("2m15s compact raw should stay unspaced", two);
+}
+
+function fakeEl(ownText, parentText) {
+  const parent = parentText
+    ? {
+        nodeType: 1,
+        parentElement: null,
+        innerText: parentText,
+        textContent: parentText,
+        getAttribute() { return null; }
+      }
+    : null;
+  return {
+    nodeType: 1,
+    tagName: "SPAN",
+    parentElement: parent,
+    children: { length: 0 },
+    innerText: ownText,
+    textContent: ownText,
+    getAttribute() { return null; },
+    childNodes: [{ nodeType: 3, nodeValue: ownText }]
+  };
+}
+
+const listBadge = fakeEl("41s", "test 41s Canlı Destek");
+const infoLeaf = fakeEl("53 min 43 s", "Info test 53 min 43 s Custom Field");
+const emptyAfterReply = fakeEl("", "test Canlı Destek");
+if (compactLabelOf(listBadge) !== "41s") {
+  failed += 1;
+  console.error("list badge 41s should be read");
+}
+if (compactLabelOf(infoLeaf) !== "") {
+  failed += 1;
+  console.error("info duration must not look like a compact badge", compactLabelOf(infoLeaf));
+}
+if (compactLabelOf(emptyAfterReply) !== "") {
+  failed += 1;
+  console.error("cleared badge after reply should be empty");
+}
+if (isIgnoredDurationContext(infoLeaf) !== true) {
+  failed += 1;
+  console.error("info panel context should be ignored");
+}
+if (isIgnoredDurationContext(listBadge) !== false) {
+  failed += 1;
+  console.error("left list badge context should not be ignored");
 }
 
 if (failed) {
