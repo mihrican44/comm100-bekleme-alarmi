@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Comm100 Bekleme Alarmı — Demo Konsol</title>
+    <title>Mesaj Süre Takip — Demo</title>
     <style>
       :root {
         --bg: #071018;
@@ -61,7 +61,7 @@
   <body>
     <header>
       <div>
-        <h1>Comm100 Ajan Konsolu — Demo</h1>
+        <h1>Sohbet konsolu — Demo</h1>
         <p class="sub">Sol listedeki 12s / 2m rozeti gerçek kaynaktır. Sağdaki Info oturum süresi yok sayılır. Yanıtlayınca rozet 0 olur.</p>
       </div>
       <div class="hint">Bu sayfa tarayıcıda eklenti mantığını test etmek içindir. Gerçek panelde yüklenmiş Chrome eklentisi kullanılır.</div>
@@ -258,8 +258,8 @@
         chrome.storage.sync.set({ volume: Number(volume.value) / 100 });
       });
       document.getElementById("testAlarm").addEventListener("click", () => {
-        window.Comm100AlarmPlayer?.unlock();
-        window.Comm100AlarmPlayer?.test(2800);
+        window.WaitAlarmPlayer?.unlock();
+        window.WaitAlarmPlayer?.test(2800);
       });
       document.getElementById("pickSound").addEventListener("click", () => soundFile.click());
       soundFile.addEventListener("change", () => {
@@ -294,7 +294,7 @@
         const sessionEl = document.getElementById("sessionDuration");
         if (infoName) infoName.textContent = chat ? chat.name : "—";
         if (sessionEl) sessionEl.textContent = fmtSession(sessionSeconds);
-        const api = window.Comm100WaitAlarm;
+        const api = window.WaitAlarm;
         if (api) {
           const st = api.getStatus();
           maxWaitEl.textContent = fmtClock(st.maxWaitTimeSeconds || 0);

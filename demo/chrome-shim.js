@@ -44,7 +44,7 @@
 
   window.chrome = {
     runtime: {
-      id: "demo-comm100-wait-alarm",
+      id: "demo-wait-alarm",
       lastError: null,
       sendMessage() {},
       getURL(path) {

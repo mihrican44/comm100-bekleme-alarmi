@@ -45,7 +45,7 @@ const {
   compactLabelOf,
   isIgnoredDurationContext,
   isChatWatchUrl
-} = sandbox.Comm100WaitAlarm;
+} = sandbox.WaitAlarm;
 const cases = [
   ["02:15", 135],
   ["1:02:03", 3723],
@@ -165,7 +165,7 @@ if (isIgnoredDurationContext(listBadge) !== false) {
 const urlCases = [
   ["https://dash15.lively-chat.com/agentconsole/chats?partnerId=100001", true],
   ["https://dash15.lively-chat.com/agentconsole/chats", true],
-  ["https://github.com/mihrican44/comm100-bekleme-alarmi", false],
+  ["https://example.com/other", false],
   ["https://dash15.lively-chat.com/agentconsole/agents", false],
   ["http://127.0.0.1:43147/demo/index.html", true]
 ];

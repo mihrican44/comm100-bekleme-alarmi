@@ -1,5 +1,5 @@
 /**
- * Comm100 Bekleme Alarmı — Manifest V3 service worker.
+ * Mesaj Süre Takip — Manifest V3 service worker.
  * Sohbet sekmesi arkadayken taramayı canlı tutar, rozeti günceller,
  * alarmı offscreen belgede çalar (Chrome gizli sekmede sesi keser).
  */
@@ -15,12 +15,7 @@ const DEFAULT_SETTINGS = Object.freeze({
 
 const CHAT_TAB_URLS = [
   "https://*.lively-chat.com/*",
-  "https://lively-chat.com/*",
-  "https://*.comm100.com/*",
-  "https://comm100.com/*",
-  "https://*.comm100app.com/*",
-  "https://*.comm100.io/*",
-  "https://*.comm100.net/*"
+  "https://lively-chat.com/*"
 ];
 
 /**
@@ -245,7 +240,7 @@ async function pingChatTabs() {
 
 function ensureWatchAlarm() {
   if (!chrome.alarms?.create) return;
-  chrome.alarms.create("comm100-watch", { periodInMinutes: 0.5 });
+  chrome.alarms.create("wait-alarm-watch", { periodInMinutes: 0.5 });
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -261,7 +256,7 @@ chrome.runtime.onStartup.addListener(() => {
 ensureWatchAlarm();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm && alarm.name === "comm100-watch") {
+  if (alarm && alarm.name === "wait-alarm-watch") {
     pingChatTabs().catch(() => {});
   }
 });

@@ -1,5 +1,5 @@
 /**
- * Comm100 Bekleme Alarmı — content script
+ * Mesaj Süre Takip — content script
  *
  * Dinamik class/id'lere bağımlı olmadan metin nodlarını tarar, zaman
  * Dizgelerini saniyeye çevirir; eşik aşılınca yüksek siren (veya
@@ -9,8 +9,8 @@
 (() => {
   "use strict";
 
-  if (globalThis.__COMM100_WAIT_ALARM_LOADED__) return;
-  globalThis.__COMM100_WAIT_ALARM_LOADED__ = true;
+  if (globalThis.__WAIT_ALARM_LOADED__) return;
+  globalThis.__WAIT_ALARM_LOADED__ = true;
 
   const SCAN_INTERVAL_MS = 2000;
   const MUTATION_DEBOUNCE_MS = 250;
@@ -153,8 +153,8 @@
     settings.mutedUntil = normalized.mutedUntil;
     settings.soundMode = normalized.soundMode;
     settings.customSoundDataUrl = normalized.customSoundDataUrl;
-    if (globalThis.Comm100AlarmPlayer) {
-      globalThis.Comm100AlarmPlayer.configure({
+    if (globalThis.WaitAlarmPlayer) {
+      globalThis.WaitAlarmPlayer.configure({
         volume: settings.volume,
         soundMode: settings.soundMode,
         customSoundDataUrl: settings.customSoundDataUrl
@@ -606,7 +606,7 @@
         }
         return;
       }
-      globalThis.Comm100AlarmPlayer?.start();
+      globalThis.WaitAlarmPlayer?.start();
     },
     stop() {
       if (isExtensionContext) {
@@ -616,11 +616,11 @@
           /* ignore */
         }
       }
-      globalThis.Comm100AlarmPlayer?.stop();
+      globalThis.WaitAlarmPlayer?.stop();
     },
     dispose() {
       this.stop();
-      globalThis.Comm100AlarmPlayer?.dispose();
+      globalThis.WaitAlarmPlayer?.dispose();
     }
   };
 
@@ -693,7 +693,7 @@
         return;
       }
       if (message.type === "SILENCE_ALARM") {
-        globalThis.Comm100AlarmPlayer?.stop();
+        globalThis.WaitAlarmPlayer?.stop();
       }
     };
     chrome.runtime.onMessage.addListener(runtimeListener);
@@ -809,7 +809,7 @@
 
   function bindAudioUnlock() {
     if (isExtensionContext || pointerUnlockHandler) return;
-    pointerUnlockHandler = () => globalThis.Comm100AlarmPlayer?.unlock();
+    pointerUnlockHandler = () => globalThis.WaitAlarmPlayer?.unlock();
     document.addEventListener("pointerdown", pointerUnlockHandler, { passive: true });
     document.addEventListener("keydown", pointerUnlockHandler, { passive: true });
   }
@@ -882,7 +882,7 @@
     if (runtimeListener && chrome?.runtime?.onMessage) {
       try { chrome.runtime.onMessage.removeListener(runtimeListener); } catch { /* ignore */ }
     }
-    globalThis.__COMM100_WAIT_ALARM_LOADED__ = false;
+    globalThis.__WAIT_ALARM_LOADED__ = false;
   }
 
   async function start() {
@@ -931,7 +931,7 @@
     }
   }
 
-  globalThis.Comm100WaitAlarm = {
+  globalThis.WaitAlarm = {
     parseTimeToSeconds,
     extractTimesFromText,
     isCompactBadge,

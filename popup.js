@@ -100,7 +100,7 @@
     paintVolume(stored.volume);
     paintSound(stored.soundMode, local.customSoundName);
     updateMuteLabel(Number(stored.mutedUntil) || 0);
-    globalThis.Comm100AlarmPlayer?.configure({
+    globalThis.WaitAlarmPlayer?.configure({
       volume: Number(stored.volume) || 1,
       soundMode: stored.soundMode === "custom" ? "custom" : "builtin",
       customSoundDataUrl: local.customSoundDataUrl || ""
@@ -192,7 +192,7 @@
   }
 
   function configurePlayerFromUi(extra = {}) {
-    globalThis.Comm100AlarmPlayer?.configure({
+    globalThis.WaitAlarmPlayer?.configure({
       volume: Number(volumeEl.value) / 100,
       ...extra
     });
@@ -234,8 +234,8 @@
   testBtn.addEventListener("click", () => {
     showSoundError("");
     configurePlayerFromUi();
-    globalThis.Comm100AlarmPlayer?.unlock();
-    globalThis.Comm100AlarmPlayer?.test(2800);
+    globalThis.WaitAlarmPlayer?.unlock();
+    globalThis.WaitAlarmPlayer?.test(2800);
   });
 
   muteBtn.addEventListener("click", async () => {
@@ -291,7 +291,7 @@
 
   window.addEventListener("unload", () => {
     window.clearInterval(statusTimer);
-    globalThis.Comm100AlarmPlayer?.stop();
+    globalThis.WaitAlarmPlayer?.stop();
   });
 
   async function injectIntoActiveTab() {

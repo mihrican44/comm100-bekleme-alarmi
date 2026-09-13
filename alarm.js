@@ -289,5 +289,5 @@
     }
   };
 
-  globalThis.Comm100AlarmPlayer = player;
+  globalThis.WaitAlarmPlayer = player;
 })();
